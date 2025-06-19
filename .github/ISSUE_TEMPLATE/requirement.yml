@@ -1,7 +1,10 @@
 name: 📄 Create New Requirement
+
 description: Use this template to create a new functional or non-functional requirement.
 title: "[REQ]: "
 labels: ["requirement"]
+projects:
+  - "ai4sweng/AI4SWENG-KIO2"
 assignees: []
 
 body:
@@ -75,3 +78,7 @@ body:
     id: dependency
     attributes:
       label: Dependency (Relationship)
+
+  - type: markdown
+    attributes:
+      value: "➡️ After submission, this requirement will be automatically added to the **Requirements** tab in the KIO2 project."
