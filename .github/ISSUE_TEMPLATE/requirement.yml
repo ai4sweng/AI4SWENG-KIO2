@@ -1,0 +1,77 @@
+name: 📄 Create New Requirement
+description: Use this template to create a new functional or non-functional requirement.
+title: "[REQ]: "
+labels: ["requirement"]
+assignees: []
+
+body:
+  - type: input
+    id: req_id
+    attributes:
+      label: Requirement ID
+      description: Use format like FR-KIO2-03 or NFR-KIO2-01
+      placeholder: FR-KIO2-XX
+    validations:
+      required: true
+
+  - type: input
+    id: title
+    attributes:
+      label: Title
+      placeholder: e.g., Trace Generation Support
+    validations:
+      required: true
+
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective (Purpose)
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description (Scope)
+    validations:
+      required: false
+
+  - type: input
+    id: owner
+    attributes:
+      label: Owner (Partner)
+    validations:
+      required: true
+
+  - type: input
+    id: contributors
+    attributes:
+      label: Contributors (Partner)
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints / Assumptions
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+
+  - type: textarea
+    id: dependency
+    attributes:
+      label: Dependency (Relationship)
