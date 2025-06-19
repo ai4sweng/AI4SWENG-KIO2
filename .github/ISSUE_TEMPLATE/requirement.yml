@@ -4,7 +4,7 @@ description: Use this template to create a new functional or non-functional requ
 title: "[REQ]: "
 labels: ["requirement"]
 projects:
-  - "ai4sweng/AI4SWENG-KIO2"
+  - "ai4sweng/AI4SWENG KIO2"
 assignees: []
 
 body:
