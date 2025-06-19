@@ -2,7 +2,7 @@ name: 📄 Create New Requirement
 
 description: Use this template to create a new functional or non-functional requirement.
 title: "[REQ]: "
-labels: ["requirement"]
+labels: ["Requirements"]
 projects:
   - "ai4sweng/AI4SWENG KIO2"
 assignees: []
