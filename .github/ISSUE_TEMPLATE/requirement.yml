@@ -2,7 +2,7 @@ name: 📄 Create New Requirement
 
 description: Use this template to create a new functional or non-functional requirement.
 title: "[REQ]: "
-labels: ["functional requirement"]
+labels: ["requirement"]
 assignees: []
 
 body:
@@ -77,6 +77,16 @@ body:
     attributes:
       label: Dependency (Relationship)
 
+  - type: checkboxes
+    id: project_assignment
+    attributes:
+      label: Project Assignment
+      description: Please confirm this requirement is created within a selected GitHub Project.
+      options:
+        - label: "✅ I confirm this requirement will be linked to a GitHub Project manually during creation."
+    validations:
+      required: true
+
   - type: markdown
     attributes:
-      value: "➡️ After submission, this requirement will be automatically added to the **Requirements** tab in the KIO2 project."
+      value: "➡️ After submission, this requirement must be added to the **AI4SWENG KIO2** project in the **Requirements** column, either manually or by automation."
