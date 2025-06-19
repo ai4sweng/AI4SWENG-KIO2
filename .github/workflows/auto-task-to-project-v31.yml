@@ -1,0 +1,90 @@
+
+name: Auto-Assign Task to Project Column
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  assign-task:
+    if: contains(github.event.issue.labels.*.name, 'task')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+      pull-requests: write
+      project: write
+    steps:
+      - name: Assign task to AI4SWENG KIO2 > Backlog
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const org = "ai4sweng";
+            const projectNumber = 31;
+            const projectTitle = "AI4SWENG KIO2";
+            const issueNodeId = context.payload.issue.node_id;
+
+            const projects = await github.graphql(`
+              query {
+                organization(login: "${org}") {
+                  projectsV2(first: 20) {
+                    nodes {
+                      id
+                      number
+                      title
+                      fields(first: 20) {
+                        nodes {
+                          id
+                          name
+                          dataType
+                          options {
+                            id
+                            name
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `);
+
+            const project = projects.organization.projectsV2.nodes.find(p => p.number === projectNumber && p.title === projectTitle);
+            if (!project) throw new Error("Project not found");
+
+            const itemRes = await github.graphql(`
+              mutation($projectId:ID!, $contentId:ID!) {
+                addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
+                  item { id }
+                }
+              }
+            `, {
+              projectId: project.id,
+              contentId: issueNodeId
+            });
+
+            const itemId = itemRes.addProjectV2ItemById.item.id;
+
+            const statusField = project.fields.nodes.find(f => f.name === "Status");
+            const option = statusField.options.find(o => o.name.toLowerCase() === "backlog");
+
+            await github.graphql(`
+              mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $projectId,
+                  itemId: $itemId,
+                  fieldId: $fieldId,
+                  value: {
+                    singleSelectOptionId: $optionId
+                  }
+                }) {
+                  projectV2Item { id }
+                }
+              }
+            `, {
+              projectId: project.id,
+              itemId,
+              fieldId: statusField.id,
+              optionId: option.id
+            });
