@@ -1,0 +1,35 @@
+name: ✅ New Task
+description: Basic task for development, debugging, or integration
+title: "[Task]: "
+labels: ["task"]
+assignees: []
+
+body:
+  - type: input
+    id: linked_req
+    attributes:
+      label: Related Requirement ID
+      placeholder: e.g., FR-KIO2-03
+      description: (Optional) Link to the requirement this task supports
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Task Description
+      description: What should be done?
+
+  - type: textarea
+    id: deliverable
+    attributes:
+      label: Expected Output / Deliverable
+      description: What will be the result of this task?
+
+  - type: dropdown
+    id: status
+    attributes:
+      label: Initial Status
+      options:
+        - Backlog
+        - In Progress
+        - Review
+        - Done
