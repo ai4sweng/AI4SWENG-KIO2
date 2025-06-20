@@ -1,7 +1,7 @@
 name: ✅ New Task
 description: Basic task for development, debugging, or integration
 title: "[Task]: "
-labels: ["task"]
+labels: ["Task"]
 assignees: []
 
 body:
@@ -9,7 +9,7 @@ body:
     id: linked_req
     attributes:
       label: Related Requirement ID
-      placeholder: e.g., FR-KIO2-03
+      placeholder: e.g., Task-KIO2-03
       description: (Optional) Link to the requirement this task supports
 
   - type: textarea
