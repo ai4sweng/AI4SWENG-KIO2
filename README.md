@@ -45,7 +45,7 @@ This repository centralizes all assets related to the development, documentation
 
 ---
 
-## 🧠 Project Board (GitHub Projects v2)
+## Project Board (GitHub Projects v2)
 
 We manage all work items through a shared board:
 👉 [AI4SWENG KIO2 Project Board](https://github.com/orgs/ai4sweng/projects/31)
