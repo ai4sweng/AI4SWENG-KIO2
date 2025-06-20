@@ -1,0 +1,105 @@
+# Generate a fallback GitHub Action that assigns any [REQ] issue to the AI4SWENG KIO2 project if it is missing the label or project
+
+project_number = 31
+project_title = "AI4SWENG KIO2"
+column_name = "Requirements"
+org = "ai4sweng"
+
+fallback_action = f"""
+name: Fallback Project Link for Requirements
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  fallback-requirement:
+    if: contains(github.event.issue.title, '[REQ]')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Add [REQ] issue to {project_title} > {column_name}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{{{ secrets.GITHUB_TOKEN }}}}
+          script: |
+            const issueNodeId = context.payload.issue.node_id;
+            const org = "{org}";
+            const projectNumber = {project_number};
+            const projectTitle = "{project_title}";
+            const column = "{column_name}";
+
+            const projects = await github.graphql(`
+              query {{
+                organization(login: "${{org}}") {{
+                  projectsV2(first: 20) {{
+                    nodes {{
+                      id
+                      number
+                      title
+                      fields(first: 20) {{
+                        nodes {{
+                          id
+                          name
+                          dataType
+                          options {{
+                            id
+                            name
+                          }}
+                        }}
+                      }}
+                    }}
+                  }}
+                }}
+              }}
+            `);
+
+            const project = projects.organization.projectsV2.nodes.find(p => p.number === projectNumber && p.title === projectTitle);
+            if (!project) throw new Error("Project not found");
+
+            const addItem = await github.graphql(`
+              mutation($projectId: ID!, $contentId: ID!) {{
+                addProjectV2ItemById(input: {{ projectId: $projectId, contentId: $contentId }}) {{
+                  item {{ id }}
+                }}
+              }}
+            `, {{
+              projectId: project.id,
+              contentId: issueNodeId
+            }});
+
+            const itemId = addItem.addProjectV2ItemById.item.id;
+            const statusField = project.fields.nodes.find(f => f.name === "Status");
+            const option = statusField.options.find(o => o.name.toLowerCase() === column.toLowerCase());
+
+            if (statusField && option) {{
+              await github.graphql(`
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {{
+                  updateProjectV2ItemFieldValue(input: {{
+                    projectId: $projectId,
+                    itemId: $itemId,
+                    fieldId: $fieldId,
+                    value: {{
+                      singleSelectOptionId: $optionId
+                    }}
+                  }}) {{
+                    projectV2Item {{ id }}
+                  }}
+                }}
+              `, {{
+                projectId: project.id,
+                itemId,
+                fieldId: statusField.id,
+                optionId: option.id
+              }});
+            }} else {{
+              console.log("Status field or desired column option not found");
+            }}
+"""
+
+from pathlib import Path
+fallback_path = Path("/mnt/data/fallback-req-project-link.yml")
+fallback_path.write_text(fallback_action)
+fallback_path.name
