@@ -1,6 +1,6 @@
 # AI4SWENG-KIO2
 
-# 🧠 AI4SWENG – KIO2 Project Repository
+# AI4SWENG – KIO2 Project Repository
 
 Welcome to the repository for **KIO2 (Key Innovation 2)**, owned and developed by **BitNet** as part of the AI4SWENG European collaborative project.
 
