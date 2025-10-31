@@ -76,7 +76,36 @@ body:
     id: dependency
     attributes:
       label: Dependency (Relationship)
+  - type: textarea
+    id: precondition
+    attributes:
+      label: Pre-Condition(s)
 
+  - type: textarea
+    id: input
+    attributes:
+      label: Input
+
+  - type: textarea
+    id: invariants
+    attributes:
+      label: Invariants
+
+  - type: textarea
+    id: behaviour_and_sequences
+    attributes:
+      label: Behaviour and Sequences
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+
+  - type: textarea
+    id: postcondition
+    attributes:
+      label: Post–Condition(s)
+ 
   - type: checkboxes
     id: project_assignment
     attributes:
