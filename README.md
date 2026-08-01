@@ -1,7 +1,5 @@
 # AI4SWENG-KIO2
 
-# AI4SWENG – KIO2 Project Repository
-
 Welcome to the repository for **KIO2 (Key Innovation 2)**, owned and developed by **BitNet** as part of the AI4SWENG European collaborative project.
 
 This repository centralizes all assets related to the development, documentation, requirements, and demonstration of KIO2.
@@ -66,7 +64,7 @@ All issues are auto-routed based on title or label:
 | `[REQ]`, `requirement` | `Requirements`  |
 | `[TASK]`               | `Backlog`       |
 
-Automation logic is located in:
+Automation logic is located in [`.github/workflows/smart-issue-to-project.yml`](.github/workflows/smart-issue-to-project.yml).
 
 ---
 
@@ -76,6 +74,10 @@ KIO2 is a **headless API service** that locates the fault behind a failing
 execution — it records a trace, computes a backward dynamic slice, and returns
 **ranked suspect statements** with runtime evidence. Fix generation is **KIO7's**
 job (D2.6 boundary); KIO2 hands off the slice context.
+
+> 📖 **Full technical documentation:** [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md)
+> — how it works, input/output, API, Docker, platform integration, and the
+> Grafana/OpenTelemetry status & gaps. Per-requirement specs: [`docs/requirements/`](docs/requirements/).
 
 **FocusTracer is the engine, consumed as a library** (independent tool, not
 vendored here). Install it, then this package.
