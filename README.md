@@ -67,3 +67,57 @@ All issues are auto-routed based on title or label:
 | `[TASK]`               | `Backlog`       |
 
 Automation logic is located in:
+
+---
+
+## 🧩 KIO2 Service (Implementation)
+
+KIO2 is a **headless API service** that locates the fault behind a failing
+execution — it records a trace, computes a backward dynamic slice, and returns
+**ranked suspect statements** with runtime evidence. Fix generation is **KIO7's**
+job (D2.6 boundary); KIO2 hands off the slice context.
+
+**FocusTracer is the engine, consumed as a library** (independent tool, not
+vendored here). Install it, then this package.
+
+### Layout
+
+```
+src/kio2/        service package (contract, runner, localizer, observability, service)
+src/kio2/examples/  bundled failing example (dummy input)
+tests/           tests
+docs/requirements/  FR-KIO2-XX.md (issue-template format)
+Dockerfile       independent, headless API image
+```
+
+### Run
+
+```bash
+pip install -e ../../Trace/focustracer     # engine (or from Git — see requirements.txt)
+pip install -e .                           # KIO2 service
+
+# library demo:
+python -c "from kio2 import localize; from kio2.dummy import dummy_input; print(localize(dummy_input()).message)"
+
+# API service:
+python -m kio2.main                        # POST /execute, GET /health/ on :8013
+
+# tests:
+pytest -q
+```
+
+### Docker
+
+```bash
+docker build -t ai4sweng-kio2 .
+docker run -p 8013:8013 ai4sweng-kio2
+```
+
+### Contract
+
+`POST /execute` with `{"payload": {"target_script": "...", "working_directory": "...", "functions": [...]}}`
+→ returns a `FaultLocalization` artifact (ranked `suspect_lines`, `crash_state`,
+`confidence`, `handoff_context`). A bare `{}` payload uses the bundled dummy example.
+When dropped into the AI4SWENG platform, the service auto-upgrades to a full KIO
+shell (NATS, capability announcements, HITL). See `docs/requirements/` for the
+FR mapping and `src/kio2/README.md` for module details.
