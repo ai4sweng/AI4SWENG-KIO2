@@ -250,16 +250,23 @@ wraps around each run.
 
 ## 8. Requirements mapping (D2.6)
 
-| FR | Meaning | KIO2 component | Status |
+| FR | Meaning (final D2.6) | KIO2 component | Status |
 |---|---|---|---|
-| FR-KIO2-07 | Trace recorder | FocusTracer (dep) + `runner.py` | ✅ |
-| FR-KIO2-02 | Trace Capture & Replay (forward/backward navigation) | FocusTracer `replay`/`reverse` | ✅ |
-| FR-KIO2-04 | Post-mortem expression evaluator | FocusTracer state inspection | 🟡 partial |
-| FR-KIO2-05 | AI Fault Localisation | `localizer.py` | ✅ (service core) |
+| FR-KIO2-01 | Language support (Python PoC) | FocusTracer (Python-only) | ✅ done |
+| FR-KIO2-02 | Trace Capture & Replay: forward/backward nav, state snapshots, def-use, post-mortem | FocusTracer `replay`/`reverse`/`slice`/`load`/GUI | ✅ done (engine) |
+| FR-KIO2-03 | AI-assisted replay/alignment: multi-trace compare, bioinformatics sequence alignment, trace-set curation | — | ❌ **not built** |
+| FR-KIO2-04 | Post-mortem expression evaluator (+ mock for unrecorded data) | FocusTracer state inspection (reverse/replay) | 🟡 **partial** — state inspection yes; arbitrary-expression evaluator + mock **no** |
+| FR-KIO2-05 | AI Fault Localisation (ML anomaly detection over *sets* of traces) | `localizer.py` (dynamic-slicing based) | 🟡 **partial/divergent** — localization delivered via slicing; the final-D2.6 "ML anomaly over trace sets" technique **not built** |
+| FR-KIO2-06 | AI-assisted mocking (generative) | — | ❌ **not built** |
+| FR-KIO2-07 | Trace recorder | FocusTracer + `runner.py` | ✅ done |
 | WP3 | Dynamic slicing success rate ≥ 0.85 | slicing + metric | ✅ (metric name to align) |
 
-Per-requirement specs live in `docs/requirements/FR-KIO2-XX.md` (issue-template
-format).
+**Honest summary:** the KIO2 *spine* — record → replay/navigate → slice →
+localize — is done (FR-01/02/07 ✅, FR-05 delivered via slicing). Still open:
+FR-03 (multi-trace alignment) and FR-06 (AI mocking) are **not built**, and
+FR-04 (expression evaluator) and the FR-05 *ML-anomaly-over-trace-sets* technique
+are **partial/divergent**. Per-requirement specs live in
+`docs/requirements/FR-KIO2-XX.md` (issue-template format).
 
 ---
 
@@ -286,4 +293,10 @@ handler → KIO contract mapping, FAILED path for an untraceable target.
 - **Platform** — add `publish_progress` for dashboard progress; confirm where
   pipeline planning moves after replacing the placeholder `kio2`.
 - **FR-KIO2-04** — deepen the post-mortem expression evaluator (currently state
-  inspection only).
+  inspection only; no arbitrary-expression eval or mock-for-unrecorded-data).
+- **FR-KIO2-03 (not built)** — AI-assisted multi-trace alignment / comparison and
+  trace-set curation (bioinformatics-inspired sequence alignment).
+- **FR-KIO2-06 (not built)** — generative AI mocking of external-service
+  interactions for post-mortem expression evaluation.
+- **FR-KIO2-05 technique** — optionally add ML anomaly detection over *sets* of
+  traces to match the final-D2.6 wording (current localization is slicing-based).
