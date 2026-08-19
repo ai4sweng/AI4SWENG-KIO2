@@ -1,7 +1,7 @@
 # KIO2 — Technical Documentation
 
 **KIO2 — Bug Locate & Fix: Reverse Execution & Dynamic Slicing**
-Owner: BitNet · AI4SWENG · Status: v0.1 (working, dummy-input capable)
+Owner: BitNet · AI4SWENG · Status: v0.2 (localization + replay + trace alignment)
 
 ---
 
@@ -28,42 +28,63 @@ AI4SWENG service that wraps FocusTracer behind the KIO contract.
 ## 2. Architecture
 
 ```
-                    ┌──────────────────────────── KIO2 service ────────────────────────────┐
- failing target ──► │  runner.py ──► FocusTracer ──► trace.xml                               │
- (repo + entry)     │      │            (engine)         │                                   │
-                    │      │                             ▼                                   │
-                    │      │                        slicer (FocusTracer) ── backward slice   │
-                    │      │                             │                                   │
-                    │      ▼                             ▼                                   │
-                    │  localizer.py ── rank suspects · crash state · handoff_context         │
-                    │      │                                                                 │
-                    │      ▼                                                                 │
-                    │  service.py ── KIO handler (/execute) ──► FaultLocalization artifact   │
-                    └──────────────────────────────────────────────────────────────────────┘
+                    ┌───────────────────────────── KIO2 service ──────────────────────────────┐
+ failing target ──► │  runner.py ──► FocusTracer ──► trace.xml ──┐                              │
+ (repo + entry)     │                  (engine)                  │                              │
+                    │                                            ▼                              │
+ other runs ───────►│                        ┌─── localizer.py ── slice → ranked suspects       │
+ (same program)     │   trace set ──────────►├─── replayer.py  ── cursor → recorded state       │
+                    │                        └─── comparator.py ─ distance · deltas · matrix    │
+                    │                                            │                              │
+                    │                                            ▼                              │
+                    │  service.py ── KIO handler (/execute, task_type) ──► artifact             │
+                    └────────────────────────────────────────────────────────────────────────┘
                                      │                                        │
                               observability.py                          → hand off to KIO7
                               (OTEL spans+metrics)
 ```
 
+`runner.py` is the only component that executes anything. Everything to its
+right reads the recorded trace: `localizer.py` slices it (FR-KIO2-05),
+`replayer.py` navigates it (FR-KIO2-02), `comparator.py` aligns several of them
+(FR-KIO2-03).
+
 ### Package layers (`src/kio2/`)
 
-| Module | Responsibility | Platform-independent? |
-|---|---|---|
-| `contract.py` | `Kio2Input`, `FaultLocalization`, `SuspectLine` — the interface | yes |
-| `runner.py` | run the target under FocusTracer → produce a trace (subprocess) | yes |
-| `localizer.py` | **core**: trace → slice → ranked suspects + crash state + handoff | yes (only depends on FocusTracer) |
-| `observability.py` | optional OpenTelemetry spans/metrics (no-op if OTel absent) | yes |
-| `service.py` | KIO handler + `make_app` (platform shell **or** standalone FastAPI) | adapter |
-| `dummy.py` + `examples/` | bundled failing example for standalone runs | yes |
-| `main.py` | service entrypoint (`uvicorn kio2.main:app`) | adapter |
+| Module | Responsibility | FR | Platform-independent? |
+|---|---|---|---|
+| `contract.py` | input/output models for every task — the interface | — | yes |
+| `runner.py` | run the target under FocusTracer → produce a trace (subprocess) | 07 | yes |
+| `localizer.py` | **core**: trace → slice → ranked suspects + crash state + handoff | 05 | yes (only depends on FocusTracer) |
+| `replayer.py` | **core**: post-mortem navigation over a recorded trace | 02 | yes |
+| `comparator.py` | **core**: align traces / curate a trace set | 03 | yes |
+| `observability.py` | optional OpenTelemetry spans/metrics (no-op if OTel absent) | — | yes |
+| `service.py` | KIO handler + `make_app` (platform shell **or** standalone FastAPI) | — | adapter |
+| `dummy.py` + `examples/` | bundled failing example for standalone runs | — | yes |
+| `main.py` | service entrypoint (`uvicorn kio2.main:app`) | — | adapter |
 
-The **core** (`localizer`, `runner`, `contract`, `observability`) has no
-dependency on the AI4SWENG platform, so KIO2 runs identically as a library call,
-a standalone API, or a platform KIO shell.
+The **core** (`localizer`, `replayer`, `comparator`, `runner`, `contract`,
+`observability`) has no dependency on the AI4SWENG platform, so KIO2 runs
+identically as a library call, a standalone API, or a platform KIO shell.
+
+`replayer` and `comparator` are strictly **read-only over an existing trace** —
+they never re-run the program. Only `runner` executes anything, and only to
+capture the initial recording.
 
 ---
 
 ## 3. Input and Output
+
+KIO2 serves **three task types** on one endpoint, selected by `task_type` in the
+payload. When `task_type` is absent it is inferred from the payload shape
+(`trace_paths` ⇒ alignment, `trace_path` ⇒ replay, otherwise localization), so
+callers written against the original localization-only contract keep working.
+
+| `task_type` | Input | Output | Requirement |
+|---|---|---|---|
+| `fault_localization` (default) | `Kio2Input` | `FaultLocalization` | FR-KIO2-05 |
+| `replay` | `ReplayInput` | `ReplayView` | FR-KIO2-02 |
+| `trace_alignment` | `AlignInput` | `TraceComparison` | FR-KIO2-03 |
 
 ### Input — `Kio2Input` (envelope `payload`)
 
@@ -105,6 +126,51 @@ A bare payload (no `target_script`) falls back to the bundled dummy example.
 - **Scoring**: `criterion` (the crash statement) = 1.0 > `control` = 0.75 > `data` = 0.5, de-duplicated by `file:line`.
 - **status**: `DONE` (confidence ≥ 0.6) · `REVIEW_REQUIRED` (low confidence → HITL) · `FAILED` (target could not be traced, with an `error`).
 
+### `replay` — `ReplayInput` → `ReplayView` (FR-KIO2-02)
+
+Post-mortem navigation over a trace that was already recorded. **Stateless**: the
+caller keeps the returned `cursor` and sends it back as `seq` on the next step,
+so there is no server-side session to expire or to share between replicas.
+
+| Field | Meaning |
+|---|---|
+| `trace_path` (required) | the recorded trace to navigate |
+| `seq` / `at_event` / `at_line` (+`function`) / `at_exception` | where to place the cursor (default: start of execution) |
+| `step` | signed line steps from that point (`+N` forward, `−N` backward) |
+| `step_action` + `back` | debugger step `into` / `over` / `out`, optionally in reverse |
+| `window` | how many neighbour line-events to return around the cursor |
+| `def_var` | also report the statement that last defined this variable (def-use) |
+
+Returns `cursor` / `total` / `can_forward` / `can_back`, `current` (the executed
+statement plus the **recorded** state, `{name: {value, type}}`), a `timeline`
+window for a scrubber, and `def_of` when `def_var` was given.
+
+### `trace_alignment` — `AlignInput` → `TraceComparison` (FR-KIO2-03)
+
+`trace_paths` carries two traces (`mode: "pair"`) or three and more
+(`mode: "set"`). In pair mode the same cursor fields as `replay` drive trace A
+while trace B follows through the alignment.
+
+| `mode` | Returns |
+|---|---|
+| `pair` | `distance` / `normalized_distance` / `matched` / `gaps`; `aligned`, `a_seq`, `b_seq`, the two cursor views `a` and `b`; `delta` (variables whose recorded values differ at the aligned point); `divergences` (contiguous gap regions); `pairs` only when `include_pairs` is set |
+| `set` | `matrix` (symmetric pairwise distances, 0 diagonal), `lengths`, `reference` (medoid — the most representative run), `outlier` (furthest from the reference), `mean_distance` |
+
+The distance compares **control flow** (the executed `function:line` sequence),
+so two runs that take the same path with different data have distance 0 — that
+difference surfaces in `delta`. Identical traces always have distance 0 (the
+FR-KIO2-03 invariant).
+
+```json
+{
+  "status": "DONE", "mode": "pair", "distance": 5, "normalized_distance": 0.4545,
+  "matched": 6, "gaps": 5, "aligned": true, "a_seq": 3, "b_seq": 3,
+  "delta": [{"name": "factor", "a": "1", "b": "10"}],
+  "divergences": [{"side": "b", "start": 1, "end": 6, "length": 5, "at": 0}],
+  "message": "Distance 5 (normalized 0.455) — 5 divergent statement(s)."
+}
+```
+
 ---
 
 ## 4. API
@@ -114,14 +180,16 @@ inside the platform it is a full KIO shell (see §6).
 
 | Method / Path | Purpose |
 |---|---|
-| `POST /execute` | JOB_REQUEST → JOB_RESULT (runs localization) |
+| `POST /execute` | JOB_REQUEST → JOB_RESULT (runs the payload's `task_type`) |
 | `GET /health/` | liveness + `otel` flag |
+| `GET /tasks` | capability discovery — the task list the platform shell announces |
 
 ### Examples
 
 ```bash
-# health
+# health + capabilities
 curl http://localhost:8013/health/
+curl http://localhost:8013/tasks
 
 # localize a specific target
 curl -XPOST http://localhost:8013/execute \
@@ -130,16 +198,42 @@ curl -XPOST http://localhost:8013/execute \
 
 # bare payload ⇒ bundled dummy example
 curl -XPOST http://localhost:8013/execute -H 'content-type: application/json' -d '{"payload":{}}'
+
+# replay: step into, from the crash, in the trace the localization produced
+curl -XPOST http://localhost:8013/execute \
+  -H 'content-type: application/json' \
+  -d '{"payload":{"task_type":"replay","trace_path":"/tmp/kio2_x.xml","at_exception":true,"step_action":"out"}}'
+
+# alignment: compare two runs side by side at timeline index 3
+curl -XPOST http://localhost:8013/execute \
+  -H 'content-type: application/json' \
+  -d '{"payload":{"task_type":"trace_alignment","trace_paths":["/tmp/a.xml","/tmp/b.xml"],"seq":3}}'
+
+# alignment: curate a set of runs (distance matrix + reference + outlier)
+curl -XPOST http://localhost:8013/execute \
+  -H 'content-type: application/json' \
+  -d '{"payload":{"trace_paths":["/tmp/a.xml","/tmp/b.xml","/tmp/c.xml"]}}'
 ```
 
 ### Library / one-shot use (no server)
 
-```python
-from kio2 import localize
-from kio2.contract import Kio2Input
+Each task is also a plain function — same models, no transport:
 
+```python
+from kio2 import compare, localize, replay
+from kio2.contract import AlignInput, Kio2Input, ReplayInput
+
+# FR-KIO2-05 — locate the fault
 result = localize(Kio2Input(target_script="app.py", functions=["compute"]))
 print(result.status, result.suspect_lines[0].line)
+
+# FR-KIO2-02 — walk out of the crashing frame and read the recorded state
+view = replay(ReplayInput(trace_path=result.trace_path, at_exception=True, step_action="out"))
+print(view.current["function"], view.current["state"])
+
+# FR-KIO2-03 — why does this run differ from a passing one?
+diff = compare(AlignInput(trace_paths=[result.trace_path, "passing.xml"], seq=view.cursor))
+print(diff.distance, diff.delta)
 ```
 
 ---
@@ -212,10 +306,21 @@ configures one itself, by design.
 | `kio2.localization.confidence` | histogram | 0..1 |
 | `kio2.localization.runs` | counter | 1 |
 
+The `replay` and `trace_alignment` tasks emit a span named after the task
+(`kio2.replay`, `kio2.trace_alignment`) plus two shared instruments carrying a
+`task_type` **and** a `status` attribute, so post-mortem navigation (FR-KIO2-02)
+and trace comparison (FR-KIO2-03) can be separated on the dashboards:
+
+| Instrument | Type | Unit |
+|---|---|---|
+| `kio2.task.duration` | histogram | ms |
+| `kio2.task.runs` | counter | 1 |
+
 If `opentelemetry` is not installed, every emission is a **no-op** — the service
-runs unchanged with or without the observability stack. The integration seam is
-`observability.localization_span(session_id, target)`, which the handler already
-wraps around each run.
+runs unchanged with or without the observability stack. The integration seams are
+`observability.localization_span(session_id, target)` and
+`observability.task_span(task_type, session_id, target)`, which the handler
+already wraps around each run.
 
 ## 7b. Observability → Grafana: what's still needed (gaps)
 
@@ -262,12 +367,12 @@ Legend: ✅ done · 🟡 partial · ❌ not started · ⛔ out of KIO2 scope
 | FR | Owner | Meaning (final D2.6) | Engine (FocusTracer) | KIO2 service | Status |
 |---|---|---|---|---|---|
 | FR-KIO2-01 | BITNET | Language support (Python PoC) + build/run/lint tooling locally and in CI | ✅ Python-only, zero-touch monkey-patching, XSD-valid traces | ✅ `pyproject` (ruff/pytest), `tests/test_fr_kio2_01_language_support.py`, `.github/workflows/ci.yml` | ✅ **Satisfied** |
-| FR-KIO2-02 | BITNET | Trace Capture & Replay: step into/over/out/back, state snapshots, def-use slice viz, post-mortem session | ✅ `core/replay.py` (`ReplaySession`), `core/reverse.py`, `core/slicer.py`, CLI `replay`/`reverse`/`slice`/`load`, GUI tabs | 🟡 consumed indirectly by `localizer.py`; **no `replay` task on `/execute`**, no KIO2-side acceptance test | 🟡 **In progress** — engine done, service surface open |
-| FR-KIO2-03 | BITNET | Multi-trace alignment: bioinformatics-style sequence alignment, distance metric, trace-set curation | ✅ `core/align.py` — Needleman-Wunsch `align_sequences`/`align_traces`, `trace_distance` (0 for identical), `AlignedPair` multi-trace cursor, CLI `align` | ❌ no `align` task on `/execute`, no trace-set store | 🟡 **In progress** — engine done; curation + service surface open; ML framing deferred (see §8b) |
+| FR-KIO2-02 | BITNET | Trace Capture & Replay: step into/over/out/back, state snapshots, def-use slice viz, post-mortem session | ✅ `core/replay.py` (`ReplaySession`), `core/reverse.py`, `core/slicer.py`, CLI `replay`/`reverse`/`slice`/`load`, GUI tabs (Step Into/Over/Out incl. reverse) | ✅ `replayer.py` + `replay` task on `/execute`; `tests/test_fr_kio2_02_replay.py` | ✅ **Satisfied** — DAP/LSP deferred (§8b) |
+| FR-KIO2-03 | BITNET | Multi-trace alignment: bioinformatics-style sequence alignment, distance metric, trace-set curation | ✅ `core/align.py` — Needleman-Wunsch alignment, `trace_distance` (0 for identical), `divergences()`, `AlignedPair` side-by-side session, `TraceSet` (matrix / medoid / outlier), CLI `align` (3 modes), GUI Align tab | ✅ `comparator.py` + `trace_alignment` task on `/execute`; `tests/test_fr_kio2_03_alignment.py` | ✅ **Satisfied** for Objective / Input / Output / Invariant; the *Description*'s ML pipeline stays deferred (§8b) |
 | FR-KIO2-04 | HESSO | Post-mortem expression evaluator (+ mocks for unrecorded data) | 🟡 state inspection only (`replay`/`reverse`) | ❌ | 🟡 **Partial** — no arbitrary-expression eval, no mock injection |
 | FR-KIO2-05 | HESSO | AI fault localisation — ML anomaly detection over *sets* of traces | ❌ ML technique not built | ✅ slicing-based localisation (`localizer.py`) | 🟡 **Partial/divergent** — **pre-conditions now met** by FR-03 (distance defined + implemented, multi-trace replay) |
 | FR-KIO2-06 | HESSO | AI-assisted (generative) mocking of external services | ❌ | ❌ | ❌ **Not started** |
-| FR-KIO2-07 | BITNET | Trace recorder — every executed line, variable mutation, call; no manual code changes | ✅ `core/recorder.py` + `core/patcher.py`, schema v2.3 with `reads` (use-set) | ✅ `runner.py` | 🟡 **Mostly done** — no KIO2-side acceptance test; test-program corpus lives outside this repo |
+| FR-KIO2-07 | BITNET | Trace recorder — every executed line, variable mutation, call; no manual code changes | ✅ `core/recorder.py` + `core/patcher.py`, schema v2.3 with `reads` (use-set) | ✅ `runner.py`; `tests/test_fr_kio2_07_trace_recorder.py` (state capture, replay-readability, semantics, reproducibility) | ✅ **Satisfied** |
 | FR-KIO2-08 | AI4 / UREAD | LLM-assisted live GDB debugging, HITL-gated | — | — | ⛔ **Out of KIO2 scope** — depends on all FR-KIO1 |
 
 ### Non-functional & tasks
@@ -281,14 +386,17 @@ Legend: ✅ done · 🟡 partial · ❌ not started · ⛔ out of KIO2 scope
 | Task-KIO2-02 | — | Identification of interoperability standards | ❌ **spec file empty** |
 | WP3 KPI | BITNET | Dynamic slicing success rate ≥ 0.85 → `kio.slicing.success_rate` | 🟡 slicing ✅, metric name not yet emitted (see §7b gap 2) |
 
-**Honest summary.** The KIO2 *spine* — record → replay/navigate → slice →
-localize → align — is implemented in the engine (FR-01 ✅, FR-02/03/07 engine ✅).
-What is open on **BitNet's** side is the **service surface** (FR-02/03 are not
-reachable through `/execute`), **NFR-KIO2-01** (performance, untouched), and the
-two empty Task specs. HESSO-owned FR-04/05/06 and NFR-02 remain open, but FR-05's
-stated pre-conditions ("distance between traces formally defined and implemented",
-"replay engine supports multiple traces simultaneously") are now **satisfied** by
-FR-03, so FR-05 is unblocked.
+**Honest summary.** All four BitNet-owned functional requirements — FR-01, FR-02,
+FR-03, FR-07 — are **Satisfied**: the spine (record → replay/navigate → slice →
+localize → align) is implemented in the engine, reachable through the KIO2
+contract, and covered by per-requirement acceptance tests in this repo. What
+remains on BitNet's side is **NFR-KIO2-01** (performance benchmarks and CI gates,
+untouched) and the two empty Task specs. HESSO-owned FR-04/05/06 and NFR-02 are
+still open, but FR-05's stated pre-conditions — *"the notion of distance between
+traces is formally defined"*, *"the evaluation of trace distances is
+implemented"*, *"the replay engine … supports interactions with multiple
+execution traces simultaneously"* — are all **met** by FR-03, so FR-05 is
+unblocked and its input (the pairwise distance matrix) is already produced.
 
 ### 8b. Scope decisions (recorded, not defects)
 
@@ -307,25 +415,34 @@ listed here so the requirement text and the delivery do not silently diverge.
 ## 9. Testing & CI
 
 ```bash
-pip install -e path/to/focustracer      # engine (needs >= 1.8 — see below)
+pip install -e path/to/focustracer      # engine (needs >= 1.9 — see below)
 pip install -e ".[dev]"                 # KIO2 service + pytest
 ruff check .                            # lint (FR-KIO2-01 tooling)
 pytest -q                               # tests/
 ```
 
-> **Engine version matters.** KIO2 imports `focustracer.core.{slicer,reverse,explain}`.
-> Those arrived in FocusTracer 1.5–1.6; `replay`/`align` in 1.8. An older engine
-> fails at import, so the dependency is pinned `focustracer>=1.8`.
+> **Engine version matters.** KIO2 imports `focustracer.core.{slicer,reverse,explain}`
+> (FocusTracer 1.5–1.6), `core.replay` / `core.align` (1.8), and `align.TraceSet` +
+> `AlignedPair.seek/step/state_delta` (1.9). An older engine fails at import, so the
+> dependency is pinned `focustracer>=1.9`.
 
 | Test file | Covers |
 |---|---|
 | `tests/test_kio2.py` | fault line found on the dummy, evidence ranking, dummy fallback, handler → KIO contract mapping, FAILED path for an untraceable target |
 | `tests/test_fr_kio2_01_language_support.py` | **FR-KIO2-01 acceptance** — a Python target produces an XSD-valid trace; instrumentation preserves semantics |
+| `tests/test_fr_kio2_02_replay.py` | **FR-KIO2-02 acceptance** — step into/over/out, forward↔backward symmetry, jump-to-crash, def-use, replayed state == the localizer's recorded crash state, task routing over `/execute` |
+| `tests/test_fr_kio2_03_alignment.py` | **FR-KIO2-03 acceptance** — distance 0 for identical runs (the invariant), symmetry, divergence accounting, side-by-side cursor + value deltas, trace-set matrix/reference/outlier, task routing |
+| `tests/test_fr_kio2_07_trace_recorder.py` | **FR-KIO2-07 acceptance** — variable states captured with types, exception recorded, trace readable by the replay engine, recorded values match an untraced run, two recordings of one program are identical |
+| `tests/test_http_contract.py` | the deployed surface — `/health/`, `/tasks`, and `/execute` for all three task types over the real ASGI app |
+
+`tests/conftest.py` records one program under several inputs — that trace set is
+what the FR-02/03/07 tests navigate, align and curate.
 
 Engine-side coverage lives in the FocusTracer repo: `tests/test_replay.py`
 (step into/over/out/back, depth mechanics), `tests/test_reverse.py` (exact state
-reconstruction), `tests/test_align.py` (distance 0 for identical traces, positive
-distance and gap annotations for divergent inputs), `tests/test_slicer.py`.
+reconstruction), `tests/test_align.py` (distance 0 for identical traces, gap
+annotations, `TraceSet` matrix/medoid/outlier, address-insensitive value deltas),
+`tests/test_gui_align.py` (the web API), `tests/test_slicer.py`.
 
 **CI** — [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `ruff check`
 and `pytest` on every push and PR (Python 3.11 + 3.12), installing FocusTracer
@@ -340,23 +457,20 @@ Ordered by ownership, so BitNet's queue is separable from partner work.
 
 ### BitNet-owned (the actionable queue)
 
-1. **FR-KIO2-02 / 03 service surface** — `/execute` advertises only
-   `fault_localization` (`service.py::_SUPPORTED_TASKS`). Both requirements state
-   *"Output: an API allowing a UI or a CLI to interact with the system"*. Add
-   `replay` and `align` task types over `ReplaySession` / `align_traces`, plus
-   KIO2-side acceptance tests.
-2. **NFR-KIO2-01 (untouched)** — no benchmark harness, no p95 measurement, no
-   ≤ 5 s gate, no perf job in CI. This is the only fully unstarted BitNet item.
-3. **Trace-set curation** — FR-03 asks to *"lay down foundation to curate sets of
-   execution traces"*; FR-05 consumes exactly that. Needs a trace-set layout +
-   recording automation (the test-program corpus currently lives outside this repo).
-4. **FR-KIO2-07 acceptance test** — recorder works, but nothing in `tests/` asserts
-   the requirement's own criteria (variable states captured; trace machine-readable
-   by the replay engine).
-5. **OTEL** — emit `kio.slicing.success_rate`, install/bootstrap the SDK, wire the
+1. **NFR-KIO2-01 (untouched)** — no benchmark harness, no p95 measurement, no
+   ≤ 5 s gate, no perf job in CI. This is now the only fully unstarted BitNet item.
+2. **OTEL** — emit `kio.slicing.success_rate`, install/bootstrap the SDK, wire the
    collector (with the observability agent). See §7b.
-6. **Task-KIO2-01 / 02** — both spec files are **empty**; the compliance and
+3. **Task-KIO2-01 / 02** — both spec files are **empty**; the compliance and
    interoperability-standards analyses still have to be written.
+4. **Trace-set persistence** — `TraceSet` curates a set that the caller assembles;
+   there is no *stored* corpus with metadata (input, config, pass/fail label).
+   FR-KIO2-05 and NFR-KIO2-02 will both want one, and the test-program corpus
+   still lives outside this repo.
+5. **Alignment cost at scale** — Needleman-Wunsch is O(n·m) per pair and a trace
+   set is O(N²) pairs. Fine for PoC-sized traces; a long-running program will need
+   banding or an anchor-based prefilter. Worth measuring under NFR-KIO2-01 before
+   optimising.
 
 ### Cross-partner / coordination
 

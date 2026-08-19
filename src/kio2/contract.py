@@ -8,6 +8,16 @@ in the standalone KIO2 repository, or as a plain library call.
 KIO2 scope per D2.6: locate the fault (reverse execution + dynamic slicing).
 It does NOT generate the fix — that is KIO7. The ``handoff_context`` field is
 the packaged slice KIO2 hands to KIO7.
+
+Three task families, one per requirement:
+
+===========================  ================================  ==============
+Task type                    Input / Output                    Requirement
+===========================  ================================  ==============
+``fault_localization``       ``Kio2Input`` → ``FaultLocalization``   FR-KIO2-05
+``replay``                   ``ReplayInput`` → ``ReplayView``        FR-KIO2-02
+``trace_alignment``          ``AlignInput`` → ``TraceComparison``    FR-KIO2-03
+===========================  ================================  ==============
 """
 
 from __future__ import annotations
@@ -60,6 +70,116 @@ class FaultLocalization(BaseModel):
     confidence: float = 0.0
     handoff_context: str = ""  # slice context for KIO7 (fix generation)
     trace_path: str = ""
+    message: str = ""
+    error: str | None = None
+
+    def to_artifact(self) -> dict[str, Any]:
+        return _dump(self)
+
+
+# ── FR-KIO2-02: replay ────────────────────────────────────────────────────────
+
+
+class ReplayInput(BaseModel):
+    """Where to place the replay cursor in an already-recorded trace.
+
+    The start point is one of ``seq`` / ``at_event`` / ``at_line`` /
+    ``at_exception`` (default: the start of execution); ``step`` and
+    ``step_action`` then move from there. Stateless by design: a UI keeps the
+    returned ``cursor`` and sends it back as ``seq`` on the next call.
+    """
+
+    trace_path: str = Field(..., description="Path to a recorded trace XML")
+    seq: int | None = Field(None, description="Start at timeline index")
+    at_event: int | None = Field(None, description="Start at line-event id")
+    at_line: int | None = Field(None, description="Start at a source line")
+    function: str | None = Field(None, description="Disambiguate at_line by function")
+    at_exception: bool = Field(False, description="Start at the recorded crash")
+    step: int = Field(0, description="Signed line steps from the start point (+fwd / -back)")
+    step_action: str | None = Field(None, description="Debugger step: 'into' | 'over' | 'out'")
+    back: bool = Field(False, description="Apply step_action backward (reverse execution)")
+    window: int = Field(3, description="Neighbour line-events to return around the cursor")
+    def_var: str | None = Field(None, description="Report the statement that last defined this variable")
+
+    def to_payload(self) -> dict[str, Any]:
+        return _dump(self)
+
+
+class ReplayView(BaseModel):
+    """The cursor position, the state recorded there, and its neighbourhood."""
+
+    status: str  # "DONE" | "FAILED"
+    trace_path: str = ""
+    cursor: int = 0
+    total: int = 0
+    can_forward: bool = False
+    can_back: bool = False
+    current: dict[str, Any] = Field(default_factory=dict)
+    timeline: list[dict[str, Any]] = Field(default_factory=list)
+    def_of: dict[str, Any] | None = None
+    message: str = ""
+    error: str | None = None
+
+    def to_artifact(self) -> dict[str, Any]:
+        return _dump(self)
+
+
+# ── FR-KIO2-03: trace alignment ───────────────────────────────────────────────
+
+
+class AlignInput(BaseModel):
+    """Two traces to align (optionally navigated side by side), or N to curate.
+
+    Two paths ⇒ ``mode="pair"``: distance, divergence regions, and a cursor on
+    trace A reporting the aligned point and value deltas in trace B. Three or
+    more ⇒ ``mode="set"``: the pairwise distance matrix plus the reference
+    (medoid) and outlier of the set.
+    """
+
+    trace_paths: list[str] = Field(..., description="Traces of the same program (>= 2)")
+    seq: int | None = Field(None, description="Place A's cursor at this timeline index")
+    at_event: int | None = Field(None, description="Place A's cursor at a line-event id")
+    at_line: int | None = Field(None, description="Place A's cursor at a source line")
+    function: str | None = Field(None, description="Disambiguate at_line by function")
+    at_exception: bool = Field(False, description="Place A's cursor at the crash")
+    step: int = Field(0, description="Signed line steps from the start point")
+    step_action: str | None = Field(None, description="Debugger step on A: 'into' | 'over' | 'out'")
+    back: bool = Field(False, description="Apply step_action backward")
+    window: int = Field(3, description="Neighbour line-events around each cursor")
+    include_pairs: bool = Field(False, description="Include the raw alignment pair list (large)")
+
+    def to_payload(self) -> dict[str, Any]:
+        return _dump(self)
+
+
+class TraceComparison(BaseModel):
+    """How a set of traces relate: distance, alignment, and where they diverge."""
+
+    status: str  # "DONE" | "FAILED"
+    mode: str = ""  # "pair" | "set"
+    trace_paths: list[str] = Field(default_factory=list)
+
+    # mode="pair"
+    distance: int = 0
+    normalized_distance: float = 0.0
+    matched: int = 0
+    gaps: int = 0
+    aligned: bool = False
+    a_seq: int = 0
+    b_seq: int | None = None
+    a: dict[str, Any] = Field(default_factory=dict)
+    b: dict[str, Any] | None = None
+    delta: list[dict[str, Any]] = Field(default_factory=list)
+    divergences: list[dict[str, Any]] = Field(default_factory=list)
+    pairs: list[Any] | None = None
+
+    # mode="set"
+    lengths: list[int] = Field(default_factory=list)
+    matrix: list[list[float]] = Field(default_factory=list)
+    reference: int | None = None
+    outlier: int | None = None
+    mean_distance: float = 0.0
+
     message: str = ""
     error: str | None = None
 

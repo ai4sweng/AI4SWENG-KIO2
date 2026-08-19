@@ -37,6 +37,14 @@ try:  # OTel is optional
         "kio2.localization.runs", unit="1",
         description="Count of localization runs by status",
     )
+    _task_dur = _meter.create_histogram(
+        "kio2.task.duration", unit="ms",
+        description="Wall time of a KIO2 task by task_type (replay, trace_alignment, …)",
+    )
+    _task_runs = _meter.create_counter(
+        "kio2.task.runs", unit="1",
+        description="Count of KIO2 task executions by task_type and status",
+    )
     _OTEL = True
 except Exception:  # pragma: no cover - depends on host env
     _OTEL = False
@@ -89,6 +97,51 @@ def _record_from_ctx(ctx: dict) -> None:
         if result is not None:
             _suspects.record(int(getattr(result, "slice_size", 0)), attrs)
             _conf.record(float(getattr(result, "confidence", 0.0)), attrs)
+    except Exception:  # pragma: no cover
+        pass
+
+
+@contextmanager
+def task_span(task_type: str, session_id: str, target: str = "") -> Iterator[dict]:
+    """Wrap a non-localization KIO2 task (replay, trace alignment) in a span.
+
+    Same shape as :func:`localization_span` — stash the result in ``ctx["result"]``
+    and the duration/outcome metrics are recorded on exit — but the emitted
+    instruments carry a ``task_type`` attribute so the dashboards can separate
+    post-mortem navigation (FR-KIO2-02) from trace comparison (FR-KIO2-03).
+    """
+    ctx: dict = {"_t0": time.perf_counter()}
+    if not _OTEL:
+        try:
+            yield ctx
+        finally:
+            _record_task(task_type, ctx)
+        return
+
+    with _tracer.start_as_current_span(f"kio2.{task_type}") as span:
+        span.set_attribute("kio2.session_id", session_id)
+        span.set_attribute("kio2.task_type", task_type)
+        if target:
+            span.set_attribute("kio2.target", target)
+        try:
+            yield ctx
+        finally:
+            result = ctx.get("result")
+            if result is not None:
+                span.set_attribute("kio2.status", getattr(result, "status", "UNKNOWN"))
+            _record_task(task_type, ctx)
+
+
+def _record_task(task_type: str, ctx: dict) -> None:
+    if not _OTEL:
+        return
+    duration_ms = (time.perf_counter() - ctx.get("_t0", time.perf_counter())) * 1000.0
+    result = ctx.get("result")
+    status = getattr(result, "status", "UNKNOWN") if result is not None else "ERROR"
+    attrs = {"task_type": task_type, "status": status}
+    try:
+        _task_dur.record(duration_ms, attrs)
+        _task_runs.add(1, attrs)
     except Exception:  # pragma: no cover
         pass
 

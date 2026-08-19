@@ -88,6 +88,11 @@ def run_trace(
         proc = subprocess.run(
             cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout,
             env=_subprocess_env(),
+            # FocusTracer writes UTF-8 (its trace views use ▶ / Δ / ≠). Without an
+            # explicit codec, `text=True` decodes with the *host* locale — cp1254 on
+            # a Turkish Windows install — and the reader thread dies on the first
+            # non-ASCII byte, losing the diagnostics we report in RunnerError.
+            encoding="utf-8", errors="replace",
         )
     except subprocess.TimeoutExpired as exc:
         raise RunnerError(f"tracing timed out after {timeout:.0f}s") from exc

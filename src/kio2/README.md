@@ -8,8 +8,9 @@ returns **ranked suspect statements** with runtime evidence.
 > platform (or the standalone KIO2 repo). **FocusTracer stays an independent
 > tool** and is consumed here as a library dependency — it is *not* vendored
 > inside this package. Install it separately (see `requirements.txt`):
-> `pip install -e path/to/focustracer` — **version >= 1.8**, since KIO2 imports
-> `core.slicer`, `core.reverse`, `core.explain` and the replay/align engine.
+> `pip install -e path/to/focustracer` — **version >= 1.9**, since KIO2 imports
+> `core.slicer`, `core.reverse`, `core.explain`, the replay engine and
+> `align.TraceSet` / `AlignedPair.seek`.
 > KIO2 = the consumer; FocusTracer = the engine.
 
 Per D2.6, KIO2's scope is *localization*. It does **not** generate the fix — that
@@ -28,12 +29,18 @@ platform. The same code runs three ways:
 
 Layers (each importable on its own):
 
-- `contract.py` — `Kio2Input` / `FaultLocalization` / `SuspectLine` (the interface)
-- `runner.py` — runs the target under FocusTracer to produce a trace
-- `localizer.py` — trace → slice → ranked suspects (**core; depends only on FocusTracer**)
+- `contract.py` — the input/output models for every task (the interface)
+- `runner.py` — runs the target under FocusTracer to produce a trace (FR-KIO2-07)
+- `localizer.py` — trace → slice → ranked suspects (FR-KIO2-05)
+- `replayer.py` — post-mortem navigation over a recorded trace (FR-KIO2-02)
+- `comparator.py` — align traces / curate a trace set (FR-KIO2-03)
 - `observability.py` — optional OpenTelemetry spans/metrics (no-op if OTel absent)
 - `service.py` — KIO handler + `make_app` (platform shell or standalone FastAPI)
 - `dummy.py` + `examples/` — a bundled failing example for standalone runs
+
+The three core modules (`localizer`, `replayer`, `comparator`) depend only on
+FocusTracer and `contract`, so each is usable as a plain function as well as over
+`/execute`. Only `runner` executes anything; the rest are read-only over a trace.
 
 ## Contract
 

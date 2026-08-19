@@ -85,7 +85,8 @@ vendored here). Install it, then this package.
 ### Layout
 
 ```
-src/kio2/        service package (contract, runner, localizer, observability, service)
+src/kio2/        service package (contract, runner, localizer, replayer,
+                 comparator, observability, service)
 src/kio2/examples/  bundled failing example (dummy input)
 tests/           tests
 docs/requirements/  FR-KIO2-XX.md (issue-template format)
@@ -95,7 +96,7 @@ Dockerfile       independent, headless API image
 ### Run
 
 ```bash
-pip install -e ../../Trace/focustracer     # engine, needs >= 1.8 (or from Git — see requirements.txt)
+pip install -e ../../Trace/focustracer     # engine, needs >= 1.9 (or from Git — see requirements.txt)
 pip install -e ".[dev]"                    # KIO2 service + pytest
 
 # library demo:
@@ -109,8 +110,9 @@ ruff check .
 pytest -q
 ```
 
-> FocusTracer **≥ 1.8** is required: KIO2 imports `focustracer.core.{slicer,reverse,explain}`
-> and the replay/alignment engine. An older install fails at import time.
+> FocusTracer **≥ 1.9** is required: KIO2 imports `focustracer.core.{slicer,reverse,explain}`,
+> the replay engine, and `align.TraceSet` / `AlignedPair.seek` (added in 1.9).
+> An older install fails at import time.
 > [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs `ruff` + `pytest` on
 > every push and PR against Python 3.11 and 3.12.
 
@@ -123,9 +125,16 @@ docker run -p 8013:8013 ai4sweng-kio2
 
 ### Contract
 
-`POST /execute` with `{"payload": {"target_script": "...", "working_directory": "...", "functions": [...]}}`
-→ returns a `FaultLocalization` artifact (ranked `suspect_lines`, `crash_state`,
-`confidence`, `handoff_context`). A bare `{}` payload uses the bundled dummy example.
+`POST /execute` serves three task types, chosen by `task_type` in the payload
+(inferred from the payload shape when omitted, so older callers keep working):
+
+| `task_type` | Payload | Returns | FR |
+|---|---|---|---|
+| `fault_localization` (default) | `target_script`, `working_directory`, `functions`, … | `FaultLocalization` — ranked `suspect_lines`, `crash_state`, `confidence`, `handoff_context` | 05 |
+| `replay` | `trace_path` + a start point (`seq` / `at_line` / `at_exception`) + `step_action` (`into`/`over`/`out`, `back`) | `ReplayView` — cursor, recorded state, timeline window, def-use | 02 |
+| `trace_alignment` | `trace_paths`: two traces (side-by-side) or three+ (trace set) | `TraceComparison` — distance, divergences, value deltas · or matrix, reference, outlier | 03 |
+
+`GET /tasks` lists them; a bare `{}` payload uses the bundled dummy example.
 When dropped into the AI4SWENG platform, the service auto-upgrades to a full KIO
 shell (NATS, capability announcements, HITL). See `docs/requirements/` for the
 FR mapping and `src/kio2/README.md` for module details.
