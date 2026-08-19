@@ -35,6 +35,7 @@ def test_instrumentation_preserves_semantics():
     same error the trace captures at the same line.
     """
     import runpy
+
     import pytest
 
     with pytest.raises(ZeroDivisionError):

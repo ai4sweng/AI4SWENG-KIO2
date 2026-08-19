@@ -2,10 +2,8 @@
 
 import asyncio
 
-import pytest
-
 from kio2 import localize
-from kio2.contract import FaultLocalization, Kio2Input
+from kio2.contract import Kio2Input
 from kio2.dummy import EXAMPLE, dummy_input
 from kio2.service import kio2_handler
 

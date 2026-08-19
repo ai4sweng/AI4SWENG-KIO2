@@ -3,9 +3,9 @@
 #   pip install -e ../../Trace/focustracer
 #   pip install -e .
 # Or install FocusTracer from Git (adjust org/ref):
-#   pip install "focustracer @ git+https://github.com/BitnetTR/focustracer@main"
+#   pip install "focustracer @ git+https://github.com/BitnetTR/focustracer.git@master"
 
-focustracer
+focustracer>=1.8
 
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0

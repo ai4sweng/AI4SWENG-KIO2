@@ -19,7 +19,7 @@ RUN apt-get update \
 # FocusTracer = independent engine consumed as a library (adjust org/ref as needed).
 # For offline/air-gapped builds or a private repo, replace this with a COPY of a
 # local checkout + `pip install ./focustracer` (no git/network needed).
-ARG FOCUSTRACER_REF=git+https://github.com/BitnetTR/focustracer.git@main
+ARG FOCUSTRACER_REF=git+https://github.com/BitnetTR/focustracer.git@master
 RUN pip install --no-cache-dir "focustracer @ ${FOCUSTRACER_REF}"
 
 # Install the KIO2 service (focustracer already satisfied above).

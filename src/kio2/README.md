@@ -8,7 +8,9 @@ returns **ranked suspect statements** with runtime evidence.
 > platform (or the standalone KIO2 repo). **FocusTracer stays an independent
 > tool** and is consumed here as a library dependency — it is *not* vendored
 > inside this package. Install it separately (see `requirements.txt`):
-> `pip install -e path/to/focustracer`. KIO2 = the consumer; FocusTracer = the engine.
+> `pip install -e path/to/focustracer` — **version >= 1.8**, since KIO2 imports
+> `core.slicer`, `core.reverse`, `core.explain` and the replay/align engine.
+> KIO2 = the consumer; FocusTracer = the engine.
 
 Per D2.6, KIO2's scope is *localization*. It does **not** generate the fix — that
 is **KIO7**. KIO2 packages the slice (`handoff_context`) for KIO7 to consume.
@@ -89,7 +91,7 @@ python -m kio2.main            # serves on :8013
 python -c "from kio2 import localize; from kio2.dummy import dummy_input; print(localize(dummy_input()).message)"
 
 # tests
-python -m pytest kio2/tests -q
+pytest -q                     # from the repo root
 ```
 
 ## Boundary with KIO7 (fix generation)

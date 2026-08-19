@@ -13,9 +13,9 @@ KIO2 repository.
 
 from __future__ import annotations
 
-from focustracer.core.slicer import slice_trace, slice_result_to_dicts
 from focustracer.core.explain import build_slice_context
-from focustracer.core.reverse import reverse_trace, result_to_dict
+from focustracer.core.reverse import result_to_dict, reverse_trace
+from focustracer.core.slicer import slice_result_to_dicts, slice_trace
 
 from .contract import FaultLocalization, Kio2Input, SuspectLine
 from .runner import RunnerError, run_trace

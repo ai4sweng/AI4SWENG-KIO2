@@ -153,7 +153,7 @@ docker run -p 8013:8013 ai4sweng-kio2
 ```
 
 The image installs FocusTracer from source (build arg `FOCUSTRACER_REF`, default
-`git+https://github.com/BitnetTR/focustracer@main`) then the KIO2 package. For
+`git+https://github.com/BitnetTR/focustracer.git@master`) then the KIO2 package. For
 offline builds, replace the git install with a `COPY` of a local FocusTracer
 checkout. Env: `KIO_PORT` (default 8013), `KIO_HOST`.
 
@@ -250,53 +250,128 @@ wraps around each run.
 
 ## 8. Requirements mapping (D2.6)
 
-| FR | Meaning (final D2.6) | KIO2 component | Status |
-|---|---|---|---|
-| FR-KIO2-01 | Language support (Python PoC) | FocusTracer (Python-only) | ✅ done |
-| FR-KIO2-02 | Trace Capture & Replay: forward/backward nav, state snapshots, def-use, post-mortem | FocusTracer `replay`/`reverse`/`slice`/`load`/GUI | ✅ done (engine) |
-| FR-KIO2-03 | AI-assisted replay/alignment: multi-trace compare, bioinformatics sequence alignment, trace-set curation | — | ❌ **not built** |
-| FR-KIO2-04 | Post-mortem expression evaluator (+ mock for unrecorded data) | FocusTracer state inspection (reverse/replay) | 🟡 **partial** — state inspection yes; arbitrary-expression evaluator + mock **no** |
-| FR-KIO2-05 | AI Fault Localisation (ML anomaly detection over *sets* of traces) | `localizer.py` (dynamic-slicing based) | 🟡 **partial/divergent** — localization delivered via slicing; the final-D2.6 "ML anomaly over trace sets" technique **not built** |
-| FR-KIO2-06 | AI-assisted mocking (generative) | — | ❌ **not built** |
-| FR-KIO2-07 | Trace recorder | FocusTracer + `runner.py` | ✅ done |
-| WP3 | Dynamic slicing success rate ≥ 0.85 | slicing + metric | ✅ (metric name to align) |
+Covers all 13 items in [`docs/requirements/`](requirements/) — 8 FR, 3 NFR,
+2 Tasks. Engine work lands in **FocusTracer** (independent repo); KIO2 is the
+AI4SWENG service that exposes it. A requirement is only *Satisfied* when both
+columns are green: the engine capability **and** the KIO2-side surface/test.
 
-**Honest summary:** the KIO2 *spine* — record → replay/navigate → slice →
-localize — is done (FR-01/02/07 ✅, FR-05 delivered via slicing). Still open:
-FR-03 (multi-trace alignment) and FR-06 (AI mocking) are **not built**, and
-FR-04 (expression evaluator) and the FR-05 *ML-anomaly-over-trace-sets* technique
-are **partial/divergent**. Per-requirement specs live in
-`docs/requirements/FR-KIO2-XX.md` (issue-template format).
+Legend: ✅ done · 🟡 partial · ❌ not started · ⛔ out of KIO2 scope
+
+### Functional
+
+| FR | Owner | Meaning (final D2.6) | Engine (FocusTracer) | KIO2 service | Status |
+|---|---|---|---|---|---|
+| FR-KIO2-01 | BITNET | Language support (Python PoC) + build/run/lint tooling locally and in CI | ✅ Python-only, zero-touch monkey-patching, XSD-valid traces | ✅ `pyproject` (ruff/pytest), `tests/test_fr_kio2_01_language_support.py`, `.github/workflows/ci.yml` | ✅ **Satisfied** |
+| FR-KIO2-02 | BITNET | Trace Capture & Replay: step into/over/out/back, state snapshots, def-use slice viz, post-mortem session | ✅ `core/replay.py` (`ReplaySession`), `core/reverse.py`, `core/slicer.py`, CLI `replay`/`reverse`/`slice`/`load`, GUI tabs | 🟡 consumed indirectly by `localizer.py`; **no `replay` task on `/execute`**, no KIO2-side acceptance test | 🟡 **In progress** — engine done, service surface open |
+| FR-KIO2-03 | BITNET | Multi-trace alignment: bioinformatics-style sequence alignment, distance metric, trace-set curation | ✅ `core/align.py` — Needleman-Wunsch `align_sequences`/`align_traces`, `trace_distance` (0 for identical), `AlignedPair` multi-trace cursor, CLI `align` | ❌ no `align` task on `/execute`, no trace-set store | 🟡 **In progress** — engine done; curation + service surface open; ML framing deferred (see §8b) |
+| FR-KIO2-04 | HESSO | Post-mortem expression evaluator (+ mocks for unrecorded data) | 🟡 state inspection only (`replay`/`reverse`) | ❌ | 🟡 **Partial** — no arbitrary-expression eval, no mock injection |
+| FR-KIO2-05 | HESSO | AI fault localisation — ML anomaly detection over *sets* of traces | ❌ ML technique not built | ✅ slicing-based localisation (`localizer.py`) | 🟡 **Partial/divergent** — **pre-conditions now met** by FR-03 (distance defined + implemented, multi-trace replay) |
+| FR-KIO2-06 | HESSO | AI-assisted (generative) mocking of external services | ❌ | ❌ | ❌ **Not started** |
+| FR-KIO2-07 | BITNET | Trace recorder — every executed line, variable mutation, call; no manual code changes | ✅ `core/recorder.py` + `core/patcher.py`, schema v2.3 with `reads` (use-set) | ✅ `runner.py` | 🟡 **Mostly done** — no KIO2-side acceptance test; test-program corpus lives outside this repo |
+| FR-KIO2-08 | AI4 / UREAD | LLM-assisted live GDB debugging, HITL-gated | — | — | ⛔ **Out of KIO2 scope** — depends on all FR-KIO1 |
+
+### Non-functional & tasks
+
+| ID | Owner | Meaning | Status |
+|---|---|---|---|
+| NFR-KIO2-01 | **BITNET** | Performance: common ops ≤ 5 s, p95 thresholds, benchmark reports, CI/CD perf gates | ❌ **Not started** — no benchmark harness, no perf gate |
+| NFR-KIO2-02 | HESSO | Accuracy: replay fidelity ≥ 95 %, fault-loc precision ≥ 85 % / recall ≥ 80 %, FPR ≤ 10 % | ❌ **Not started** — needs a labelled bug dataset |
+| NFR-KIO2-03 | HESSO / BITNET | Modularity: module boundaries + APIs, containerisation, upgrade/rollback, dependency health | 🟡 **Partial** — layered package + `Dockerfile` ✅; API v1.x versioning, container registry, upgrade/rollback validation ❌ |
+| Task-KIO2-01 | — | EU AI Act / EU Data Act / GDPR compliance check | ❌ **spec file empty** |
+| Task-KIO2-02 | — | Identification of interoperability standards | ❌ **spec file empty** |
+| WP3 KPI | BITNET | Dynamic slicing success rate ≥ 0.85 → `kio.slicing.success_rate` | 🟡 slicing ✅, metric name not yet emitted (see §7b gap 2) |
+
+**Honest summary.** The KIO2 *spine* — record → replay/navigate → slice →
+localize → align — is implemented in the engine (FR-01 ✅, FR-02/03/07 engine ✅).
+What is open on **BitNet's** side is the **service surface** (FR-02/03 are not
+reachable through `/execute`), **NFR-KIO2-01** (performance, untouched), and the
+two empty Task specs. HESSO-owned FR-04/05/06 and NFR-02 remain open, but FR-05's
+stated pre-conditions ("distance between traces formally defined and implemented",
+"replay engine supports multiple traces simultaneously") are now **satisfied** by
+FR-03, so FR-05 is unblocked.
+
+### 8b. Scope decisions (recorded, not defects)
+
+These are deliberate PoC-scope calls made while implementing FR-02/FR-03. They are
+listed here so the requirement text and the delivery do not silently diverge.
+
+| Decision | Requirement text | Call | Rationale |
+|---|---|---|---|
+| **DAP not implemented** | FR-KIO2-02 constraint: *"Must support standard Debug Adapter Protocol (DAP) **where possible**"* | Deferred beyond the PoC | `ReplaySession` provides full functional equivalence (into/over/out/back, state, def-use) through the Python API and CLI. A DAP server is an adapter over that API and can be added later without touching the engine. |
+| **LSP jump-to-definition postponed** | FR-KIO2-02 behaviour: *"read-only source viewer supporting standard IDE features (syntax highlighting, jump to definition, …)"* | Viewer ✅, LSP ❌ | Syntax-highlighted read-only viewer ships in the GUI; language-server integration is IDE plumbing, not KIO2 debugging logic. |
+| **FR-03 ML pipeline deferred** | FR-KIO2-03 *Description*: dataset curation, feature engineering, model selection/training, model registry/MLOps, privacy checks | Alignment delivered; ML deferred | FR-03's **Objective / Behaviour / Output / Invariant** all describe trace alignment + distance, which is what is built. The ML wording in *Description* overlaps FR-KIO2-05 (HESSO). **Action needed:** agree with HESSO whether that paragraph moves to FR-05 or FR-03 gains an ML work package — otherwise FR-03 can never be marked Satisfied. |
+| **C dropped from FR-01** | FR-KIO2-01: *"Python and/or C"* | Python only | Explicit PoC constraint: *"Select one primary language (Python) for PoC."* |
 
 ---
 
-## 9. Testing
+## 9. Testing & CI
 
 ```bash
-pip install -e path/to/focustracer      # engine
-pip install -e .                        # KIO2 service
-pytest -q                               # tests/test_kio2.py
+pip install -e path/to/focustracer      # engine (needs >= 1.8 — see below)
+pip install -e ".[dev]"                 # KIO2 service + pytest
+ruff check .                            # lint (FR-KIO2-01 tooling)
+pytest -q                               # tests/
 ```
 
-Tests cover: fault line found on the dummy, evidence ranking, dummy fallback,
-handler → KIO contract mapping, FAILED path for an untraceable target.
+> **Engine version matters.** KIO2 imports `focustracer.core.{slicer,reverse,explain}`.
+> Those arrived in FocusTracer 1.5–1.6; `replay`/`align` in 1.8. An older engine
+> fails at import, so the dependency is pinned `focustracer>=1.8`.
+
+| Test file | Covers |
+|---|---|
+| `tests/test_kio2.py` | fault line found on the dummy, evidence ranking, dummy fallback, handler → KIO contract mapping, FAILED path for an untraceable target |
+| `tests/test_fr_kio2_01_language_support.py` | **FR-KIO2-01 acceptance** — a Python target produces an XSD-valid trace; instrumentation preserves semantics |
+
+Engine-side coverage lives in the FocusTracer repo: `tests/test_replay.py`
+(step into/over/out/back, depth mechanics), `tests/test_reverse.py` (exact state
+reconstruction), `tests/test_align.py` (distance 0 for identical traces, positive
+distance and gap annotations for divergent inputs), `tests/test_slicer.py`.
+
+**CI** — [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `ruff check`
+and `pytest` on every push and PR (Python 3.11 + 3.12), installing FocusTracer
+from `git+https://github.com/BitnetTR/focustracer.git@master` first. This closes
+the FR-KIO2-01 clause *"provide minimal tooling to build and run locally **and in CI**"*.
 
 ---
 
 ## 10. Known gaps / next steps
 
-- **FR docs** for FR-KIO2-07 / 02 / 04 (code exists; specs to be written).
+Ordered by ownership, so BitNet's queue is separable from partner work.
+
+### BitNet-owned (the actionable queue)
+
+1. **FR-KIO2-02 / 03 service surface** — `/execute` advertises only
+   `fault_localization` (`service.py::_SUPPORTED_TASKS`). Both requirements state
+   *"Output: an API allowing a UI or a CLI to interact with the system"*. Add
+   `replay` and `align` task types over `ReplaySession` / `align_traces`, plus
+   KIO2-side acceptance tests.
+2. **NFR-KIO2-01 (untouched)** — no benchmark harness, no p95 measurement, no
+   ≤ 5 s gate, no perf job in CI. This is the only fully unstarted BitNet item.
+3. **Trace-set curation** — FR-03 asks to *"lay down foundation to curate sets of
+   execution traces"*; FR-05 consumes exactly that. Needs a trace-set layout +
+   recording automation (the test-program corpus currently lives outside this repo).
+4. **FR-KIO2-07 acceptance test** — recorder works, but nothing in `tests/` asserts
+   the requirement's own criteria (variable states captured; trace machine-readable
+   by the replay engine).
+5. **OTEL** — emit `kio.slicing.success_rate`, install/bootstrap the SDK, wire the
+   collector (with the observability agent). See §7b.
+6. **Task-KIO2-01 / 02** — both spec files are **empty**; the compliance and
+   interoperability-standards analyses still have to be written.
+
+### Cross-partner / coordination
+
+- **FR-03 scope conflict** — resolve the alignment-vs-ML-pipeline mismatch with
+  HESSO (see §8b), otherwise FR-03 cannot be closed.
+- **FR-KIO2-05 (HESSO, now unblocked)** — its pre-conditions are met; ML anomaly
+  detection over trace sets is the remaining technique.
+- **FR-KIO2-04 (HESSO)** — arbitrary-expression evaluator + mock injection on top
+  of the existing state inspection.
+- **FR-KIO2-06 (HESSO)** — generative mocking of external-service interactions.
+- **NFR-KIO2-02 (HESSO)** — labelled bug dataset, replay-fidelity and
+  precision/recall measurement.
+- **NFR-KIO2-03** — API v1.x versioning policy, container registry,
+  upgrade/rollback validation.
 - **KIO11 input contract** — agree the `failing_test → Kio2Input` shape jointly
   with KIO11 owners; replace the dummy with real upstream input.
-- **OTEL** — emit `kio.slicing.success_rate`, install/bootstrap the SDK, wire the
-  collector (with the observability agent).
 - **Platform** — add `publish_progress` for dashboard progress; confirm where
   pipeline planning moves after replacing the placeholder `kio2`.
-- **FR-KIO2-04** — deepen the post-mortem expression evaluator (currently state
-  inspection only; no arbitrary-expression eval or mock-for-unrecorded-data).
-- **FR-KIO2-03 (not built)** — AI-assisted multi-trace alignment / comparison and
-  trace-set curation (bioinformatics-inspired sequence alignment).
-- **FR-KIO2-06 (not built)** — generative AI mocking of external-service
-  interactions for post-mortem expression evaluation.
-- **FR-KIO2-05 technique** — optionally add ML anomaly detection over *sets* of
-  traces to match the final-D2.6 wording (current localization is slicing-based).

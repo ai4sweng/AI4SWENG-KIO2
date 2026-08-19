@@ -13,8 +13,8 @@ core service runs unchanged with or without the observability stack.
 from __future__ import annotations
 
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
 try:  # OTel is optional
     from opentelemetry import metrics, trace

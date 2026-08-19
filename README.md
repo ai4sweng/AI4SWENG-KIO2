@@ -23,7 +23,7 @@ This repository centralizes all assets related to the development, documentation
 | ├── `requirements/`     | Markdown files for each requirement (e.g. `FR-KIO2-01.md`)                  |
 | └── `architecture/`     | Diagrams, high-level design, and component breakdown                        |
 | `src/`                  | Source code, scripts, or prototype implementations                          |
-| `.github/workflows/`    | GitHub Actions (automation to route issues to project columns)              |
+| `.github/workflows/`    | GitHub Actions — `ci.yml` (ruff + pytest gates) and issue-to-project routing |
 
 ---
 
@@ -95,8 +95,8 @@ Dockerfile       independent, headless API image
 ### Run
 
 ```bash
-pip install -e ../../Trace/focustracer     # engine (or from Git — see requirements.txt)
-pip install -e .                           # KIO2 service
+pip install -e ../../Trace/focustracer     # engine, needs >= 1.8 (or from Git — see requirements.txt)
+pip install -e ".[dev]"                    # KIO2 service + pytest
 
 # library demo:
 python -c "from kio2 import localize; from kio2.dummy import dummy_input; print(localize(dummy_input()).message)"
@@ -104,9 +104,15 @@ python -c "from kio2 import localize; from kio2.dummy import dummy_input; print(
 # API service:
 python -m kio2.main                        # POST /execute, GET /health/ on :8013
 
-# tests:
+# lint + tests (same gates CI enforces):
+ruff check .
 pytest -q
 ```
+
+> FocusTracer **≥ 1.8** is required: KIO2 imports `focustracer.core.{slicer,reverse,explain}`
+> and the replay/alignment engine. An older install fails at import time.
+> [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs `ruff` + `pytest` on
+> every push and PR against Python 3.11 and 3.12.
 
 ### Docker
 
