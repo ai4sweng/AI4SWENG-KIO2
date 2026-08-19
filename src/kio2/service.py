@@ -238,7 +238,7 @@ def _standalone_app(kio_id: str, title: str):
     """Minimal FastAPI app mirroring the KIO /execute contract (no platform deps)."""
     from fastapi import FastAPI
 
-    app = FastAPI(title=f"{kio_id.upper()} — {title}", version="0.2.0")
+    app = FastAPI(title=f"{kio_id.upper()} — {title}", version="1.0.6")
 
     @app.get("/health/")
     async def health() -> dict[str, Any]:
