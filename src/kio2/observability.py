@@ -146,6 +146,39 @@ def _record_task(task_type: str, ctx: dict) -> None:
         pass
 
 
+@contextmanager
+def incoming_context(headers: dict) -> Iterator[None]:
+    """Continue the caller's trace for the duration of the block.
+
+    KIO1 sends a W3C ``traceparent`` header with every dispatched step. Adopting
+    it puts KIO2's spans in the same trace as the orchestrator's, so one failing
+    workflow reads as a single tree in Grafana instead of disconnected fragments.
+    Ignoring the header costs nothing but that correlation, which is why every
+    failure path here degrades to a plain no-op.
+
+    ``asyncio.to_thread`` copies the current context, so a span opened here still
+    parents the work KIO2 runs in a worker thread.
+    """
+    token = None
+    context_module = None
+    if _OTEL:
+        try:
+            from opentelemetry import context as context_module
+            from opentelemetry.propagate import extract
+
+            token = context_module.attach(extract(headers))
+        except Exception:  # pragma: no cover - depends on host env
+            token = None
+    try:
+        yield
+    finally:
+        if token is not None and context_module is not None:
+            try:
+                context_module.detach(token)
+            except Exception:  # pragma: no cover
+                pass
+
+
 def otel_enabled() -> bool:
     """True if OpenTelemetry is importable (metrics/spans will be emitted)."""
     return _OTEL

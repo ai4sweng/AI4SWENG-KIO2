@@ -27,6 +27,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from . import kio1
 from .comparator import compare
 from .contract import AlignInput, FaultLocalization, Kio2Input, ReplayInput
 from .localizer import localize
@@ -150,6 +151,21 @@ async def _handle_localize(payload: dict[str, Any], session_id: str) -> dict[str
     return _to_kio_result(result)
 
 
+async def kio1_handler(body: dict[str, Any]) -> dict[str, Any]:
+    """Answer a KIO1 execution message (the dispatch protocol envelope).
+
+    Kept separate from :func:`kio2_handler` so neither contract constrains the
+    other. The work runs in a worker thread because KIO1 may dispatch several
+    steps to KIO2 at the same time, and each localization executes a program.
+    """
+    message = kio1.ExecutionMessage(**{
+        k: v for k, v in body.items() if k in _known_fields(kio1.ExecutionMessage)
+    })
+    with task_span(f"kio1.{message.capability or 'unknown'}", message.workflow_id, message.step_id):
+        reply = await asyncio.to_thread(kio1.handle, message)
+    return reply.model_dump() if hasattr(reply, "model_dump") else reply.dict()
+
+
 async def kio2_handler(envelope: Any) -> dict[str, Any]:
     """KIO2 handler: envelope → the requested task's artifact → JOB_RESULT payload."""
     payload = getattr(envelope, "payload", {}) or {}
@@ -240,25 +256,60 @@ def _standalone_app(kio_id: str, title: str):
 
     app = FastAPI(title=f"{kio_id.upper()} — {title}", version="1.0.6")
 
+    @app.middleware("http")
+    async def _adopt_caller_trace(request, call_next):
+        """Join the caller's trace via the W3C `traceparent` header, if any."""
+        from .observability import incoming_context
+        with incoming_context(dict(request.headers)):
+            return await call_next(request)
+
+    def _health_body() -> dict[str, Any]:
+        from .observability import otel_enabled
+        return {
+            # `agent_id` + `status` is what KIO1's liveness probe reads; the rest
+            # is KIO2's own health detail.
+            "agent_id": kio1.AGENT_ID,
+            "status": "ok",
+            "service": kio_id,
+            "title": title,
+            "otel": otel_enabled(),
+        }
+
+    # Both spellings: KIO2's own docs use `/health/`, KIO1 probes `/health`.
+    # Registering both avoids relying on redirect-following in the caller.
+    @app.get("/health")
     @app.get("/health/")
     async def health() -> dict[str, Any]:
-        from .observability import otel_enabled
-        return {"status": "ok", "service": kio_id, "title": title, "otel": otel_enabled()}
+        return _health_body()
 
     @app.get("/tasks")
     async def tasks() -> dict[str, Any]:
-        """Capability discovery — the same list the platform shell announces."""
-        return {"service": kio_id, "supported_tasks": _SUPPORTED_TASKS}
+        """Capability discovery, in both vocabularies."""
+        return {
+            "service": kio_id,
+            "agent_id": kio1.AGENT_ID,
+            "supported_tasks": _SUPPORTED_TASKS,        # KIO2's own contract
+            "capabilities": kio1.CAPABILITIES,          # register these in KIO1's config.json
+            "unsupported_capabilities": sorted(kio1.UNSUPPORTED_CAPABILITIES),
+        }
 
     @app.post("/execute")
-    async def execute(body: JobRequest) -> dict[str, Any]:
-        # Accept either {session_id, payload} or a bare payload dict.
-        payload = body.payload or {}
-        env = type("E", (), {"payload": payload, "session_id": body.session_id})()
+    async def execute(body: dict[str, Any]) -> dict[str, Any]:
+        """One path, two envelopes — KIO1's `config.json` registers a single path.
+
+        A KIO1 execution message is answered in KIO1's reply shape; anything else
+        is treated as KIO2's own `{session_id, payload}` contract. Detection is by
+        body shape, so neither caller needs to know about the other.
+        """
+        if kio1.is_kio1_message(body):
+            return await kio1_handler(body)
+
+        request = JobRequest(**{k: v for k, v in body.items() if k in _known_fields(JobRequest)})
+        env = type("E", (), {"payload": request.payload or {}, "session_id": request.session_id})()
         result_payload = await kio2_handler(env)
         return {
             "message_id": str(uuid.uuid4()),
-            "session_id": body.session_id,
+            "session_id": request.session_id,
             "source": kio_id,
             "message_type": "JOB_RESULT",
             "payload": result_payload,

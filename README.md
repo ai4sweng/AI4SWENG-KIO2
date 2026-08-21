@@ -75,9 +75,16 @@ execution — it records a trace, computes a backward dynamic slice, and returns
 **ranked suspect statements** with runtime evidence. Fix generation is **KIO7's**
 job (D2.6 boundary); KIO2 hands off the slice context.
 
+> 🔌 **Integrating KIO2 into the platform?** Start with
+> [`docs/INTEGRATION.md`](docs/INTEGRATION.md) — endpoints, the three task
+> payloads with examples, operational caveats, the open input-contract decision,
+> and where D2.6 and this implementation disagree.
+>
 > 📖 **Full technical documentation:** [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md)
 > — how it works, input/output, API, Docker, platform integration, and the
-> Grafana/OpenTelemetry status & gaps. Per-requirement specs: [`docs/requirements/`](docs/requirements/).
+> Grafana/OpenTelemetry status & gaps. Component breakdown:
+> [`docs/architecture/architecture.yml`](docs/architecture/architecture.yml).
+> Per-requirement specs: [`docs/requirements/`](docs/requirements/).
 
 **FocusTracer is the engine, consumed as a library** (independent tool, not
 vendored here). Install it, then this package.
@@ -86,7 +93,7 @@ vendored here). Install it, then this package.
 
 ```
 src/kio2/        service package (contract, runner, localizer, replayer,
-                 comparator, observability, service)
+                 comparator, observability, kio1, service)
 src/kio2/examples/  bundled failing example (dummy input)
 tests/           tests
 docs/requirements/  FR-KIO2-XX.md (issue-template format)
@@ -135,6 +142,11 @@ docker run -p 8013:8013 ai4sweng-kio2
 | `trace_alignment` | `trace_paths`: two traces (side-by-side) or three+ (trace set) | `TraceComparison` — distance, divergences, value deltas · or matrix, reference, outlier | 03 |
 
 `GET /tasks` lists them; a bare `{}` payload uses the bundled dummy example.
+
+The same `POST /execute` also speaks the **KIO1 dispatch protocol**
+(`workflow_id` / `step_id` / `capability` / `task` / `data` → `status` / `output`),
+so the orchestrator can call KIO2 directly for `bug_localization`, `diagnosis`,
+`replay` and `trace_alignment`. See [`docs/INTEGRATION.md`](docs/INTEGRATION.md) §3.
 When dropped into the AI4SWENG platform, the service auto-upgrades to a full KIO
 shell (NATS, capability announcements, HITL). See `docs/requirements/` for the
 FR mapping and `src/kio2/README.md` for module details.

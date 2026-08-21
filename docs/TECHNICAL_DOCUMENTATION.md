@@ -1,7 +1,13 @@
 # KIO2 — Technical Documentation
 
 **KIO2 — Bug Locate & Fix: Reverse Execution & Dynamic Slicing**
-Owner: BitNet · AI4SWENG · Status: v0.2 (localization + replay + trace alignment)
+Owner: BitNet · AI4SWENG · Status: v1.0.6 (localization + replay + trace alignment,
+reachable over both KIO2's own contract and the KIO1 dispatch protocol)
+
+> **Integrating KIO2 into the platform? Start with**
+> [`docs/INTEGRATION.md`](INTEGRATION.md) — endpoints, the three task payloads,
+> operational caveats, the open input-contract decision, and where D2.6 and this
+> implementation disagree. This document is the *how it works* reference.
 
 ---
 
@@ -16,8 +22,14 @@ an LLM's guess.
 
 **Scope boundary (D2.6).** KIO2 stops at *localization*. It does **not** generate
 the fix; that is **KIO7**. KIO2 packages the value-annotated slice as
-`handoff_context` for KIO7 to consume. In the program pipeline (D2.6 UC-UC1-03):
-**KIO11 confirms the failure → KIO2 localizes → KIO7 fixes → HITL approves.**
+`handoff_context` for KIO7 to consume. In the program pipeline (D2.6 UC-UC1-03,
+p.83): **KIO11 confirms the failure → KIO2 localizes → KIO7 fixes → HITL approves.**
+
+> **This reading is contested.** Four other places in D2.6 (p.37, p.91, p.99,
+> p.100) assign fixing or code-verification duties to KIO2 itself, and all four
+> KIO chains (p.80–81) place KIO2 *after* KIO7. We built to UC-UC1-03; the
+> discrepancy needs a consortium decision before the orchestrator is wired.
+> Details: [`INTEGRATION.md`](INTEGRATION.md) §8.
 
 The trace/slicing/replay engine underneath is **FocusTracer**, an independent
 tool consumed here as a **library dependency** (not vendored). KIO2 is the
@@ -59,6 +71,7 @@ right reads the recorded trace: `localizer.py` slices it (FR-KIO2-05),
 | `replayer.py` | **core**: post-mortem navigation over a recorded trace | 02 | yes |
 | `comparator.py` | **core**: align traces / curate a trace set | 03 | yes |
 | `observability.py` | optional OpenTelemetry spans/metrics (no-op if OTel absent) | — | yes |
+| `kio1.py` | KIO1 dispatch-protocol adapter (envelope translation, capability mapping, `trace_ref`) | — | adapter |
 | `service.py` | KIO handler + `make_app` (platform shell **or** standalone FastAPI) | — | adapter |
 | `dummy.py` + `examples/` | bundled failing example for standalone runs | — | yes |
 | `main.py` | service entrypoint (`uvicorn kio2.main:app`) | — | adapter |
@@ -92,13 +105,34 @@ callers written against the original localization-only contract keep working.
 |---|---|---|
 | `target_script` | str (required) | path to the failing script / entrypoint to trace |
 | `working_directory` | str | repo root (used as cwd + project root) |
-| `functions` | list[str] | trace targets; empty ⇒ trace all functions |
+| `functions` | list[str] | trace targets; **empty ⇒ discovered from the project** (see below) |
 | `criterion` | str \| null | `[FILE:]LINE[:VAR]`; `null` ⇒ localize at the crash |
 | `failing_test` | str \| null | failing-test/error context (normally from KIO11; dummy for now) |
 | `detail` | str | trace detail level (`detailed` required for slicing) |
 | `schema_version` | str | trace schema (slicing needs ≥ `2.3`) |
 
 A bare payload (no `target_script`) falls back to the bundled dummy example.
+
+#### Trace-target discovery (why `functions` is optional)
+
+KIO2's callers know *which run failed*, not *which functions to instrument* —
+D2.6 specifies the input as failing test results or runtime logs, never a
+function list. The engine, however, requires explicit function targets (file-only
+activation is not supported), and its own trace-all fallback scans **the entry
+script only**. A realistic entry point — a `main.py` that just calls into a
+package — defines no functions, so that fallback finds nothing.
+
+`runner.discover_functions()` closes the gap on the KIO2 side: when `functions`
+is empty it statically collects every function and method defined under
+`working_directory`, entry script first, skipping `.venv`, `__pycache__`,
+`node_modules` and friends. Files that fail to parse are skipped, not fatal.
+
+The list is capped at `MAX_AUTO_TARGETS` (400 — each target becomes a
+`--function` flag and Windows caps a command line at ~32 000 characters).
+Ordering puts the entry script and its siblings first, so a truncated list keeps
+the code nearest the entry point; when truncation happens it is **reported** in
+the result `message`, never silent. If no functions exist anywhere, the run fails
+with an actionable error rather than an engine-level one.
 
 ### Output — `FaultLocalization` (artifact)
 
@@ -182,7 +216,12 @@ inside the platform it is a full KIO shell (see §6).
 |---|---|
 | `POST /execute` | JOB_REQUEST → JOB_RESULT (runs the payload's `task_type`) |
 | `GET /health/` | liveness + `otel` flag |
-| `GET /tasks` | capability discovery — the task list the platform shell announces |
+| `GET /tasks` | capability discovery — in both vocabularies (`capabilities` for KIO1, `supported_tasks` for KIO2's own contract) |
+| `GET /health` | same as `/health/`; the spelling KIO1's liveness probe uses |
+
+> `POST /execute` also speaks the **KIO1 dispatch protocol** — a different
+> envelope on the same path, told apart by the body shape. Full details in
+> [`INTEGRATION.md`](INTEGRATION.md) §3.
 
 ### Examples
 
@@ -434,6 +473,8 @@ pytest -q                               # tests/
 | `tests/test_fr_kio2_03_alignment.py` | **FR-KIO2-03 acceptance** — distance 0 for identical runs (the invariant), symmetry, divergence accounting, side-by-side cursor + value deltas, trace-set matrix/reference/outlier, task routing |
 | `tests/test_fr_kio2_07_trace_recorder.py` | **FR-KIO2-07 acceptance** — variable states captured with types, exception recorded, trace readable by the replay engine, recorded values match an untraced run, two recordings of one program are identical |
 | `tests/test_http_contract.py` | the deployed surface — `/health/`, `/tasks`, and `/execute` for all three task types over the real ASGI app |
+| `tests/test_kio1_protocol.py` | **the KIO1 dispatch protocol** — envelope echo, explicit `status`, HTTP 200 on task failure, the four capabilities, `trace_ref` hand-off between steps, the refusal of `fix_recommendation`, and that KIO2's own contract still works |
+| `tests/test_target_discovery.py` | tracing a multi-module project with **no** `functions` given — discovery across modules, entry-point ordering, noise-directory skipping, truncation reporting, cross-module slice |
 
 `tests/conftest.py` records one program under several inputs — that trace set is
 what the FR-02/03/07 tests navigate, align and curate.
@@ -459,15 +500,20 @@ Ordered by ownership, so BitNet's queue is separable from partner work.
 
 1. **NFR-KIO2-01 (untouched)** — no benchmark harness, no p95 measurement, no
    ≤ 5 s gate, no perf job in CI. This is now the only fully unstarted BitNet item.
-2. **OTEL** — emit `kio.slicing.success_rate`, install/bootstrap the SDK, wire the
+2. **Operational hardening before continuous use** (see
+   [`INTEGRATION.md`](INTEGRATION.md) §8): trace files accumulate in the system
+   temp directory with no retention policy; the service **executes the code under
+   analysis**, so the container has to be treated as a sandbox; and the Docker
+   image has never been built end to end.
+3. **OTEL** — emit `kio.slicing.success_rate`, install/bootstrap the SDK, wire the
    collector (with the observability agent). See §7b.
-3. **Task-KIO2-01 / 02** — both spec files are **empty**; the compliance and
+4. **Task-KIO2-01 / 02** — both spec files are **empty**; the compliance and
    interoperability-standards analyses still have to be written.
-4. **Trace-set persistence** — `TraceSet` curates a set that the caller assembles;
+5. **Trace-set persistence** — `TraceSet` curates a set that the caller assembles;
    there is no *stored* corpus with metadata (input, config, pass/fail label).
    FR-KIO2-05 and NFR-KIO2-02 will both want one, and the test-program corpus
    still lives outside this repo.
-5. **Alignment cost at scale** — Needleman-Wunsch is O(n·m) per pair and a trace
+6. **Alignment cost at scale** — Needleman-Wunsch is O(n·m) per pair and a trace
    set is O(N²) pairs. Fine for PoC-sized traces; a long-running program will need
    banding or an anchor-based prefilter. Worth measuring under NFR-KIO2-01 before
    optimising.
@@ -485,7 +531,14 @@ Ordered by ownership, so BitNet's queue is separable from partner work.
   precision/recall measurement.
 - **NFR-KIO2-03** — API v1.x versioning policy, container registry,
   upgrade/rollback validation.
-- **KIO11 input contract** — agree the `failing_test → Kio2Input` shape jointly
-  with KIO11 owners; replace the dummy with real upstream input.
+- **KIO11 input contract (the one real integration blocker)** — D2.6 UC-UC1-03
+  specifies KIO2's input as *"failing test results or runtime logs"*; KIO2 accepts a
+  runnable entry point. Nothing maps one to the other, and `failing_test` is
+  accepted but unused. Options + recommendation: [`INTEGRATION.md`](INTEGRATION.md) §7.
+- **KIO2's role is described three different ways in D2.6**, and all four KIO
+  chains place KIO2 *after* KIO7 rather than before it. Agree the direction before
+  the orchestrator is wired: [`INTEGRATION.md`](INTEGRATION.md) §8.
+- **UC3 (FPGA, C++/HLS) cannot use KIO2 as built** — it requires FR-KIO2-01..07,
+  while the PoC decision was Python-only. Same section.
 - **Platform** — add `publish_progress` for dashboard progress; confirm where
   pipeline planning moves after replacing the placeholder `kio2`.

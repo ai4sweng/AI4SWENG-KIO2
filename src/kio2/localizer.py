@@ -28,7 +28,10 @@ _HITL_THRESHOLD = 0.6
 
 def localize(inp: Kio2Input) -> FaultLocalization:
     """Localise the fault for ``inp`` and return ranked suspect statements."""
-    # 1) Record the failing execution.
+    # 1) Record the failing execution. An empty `functions` means "trace
+    #    everything": the runner discovers the targets from the project, and any
+    #    remark about that discovery comes back in `notes` for the message.
+    notes: list[str] = []
     try:
         trace_path = run_trace(
             inp.target_script,
@@ -36,6 +39,8 @@ def localize(inp: Kio2Input) -> FaultLocalization:
             functions=inp.functions,
             detail=inp.detail,
             schema_version=inp.schema_version,
+            notes=notes,
+            **({"timeout": inp.trace_timeout} if inp.trace_timeout else {}),
         )
     except RunnerError as exc:
         return FaultLocalization(status="FAILED", message="Could not trace the target.", error=str(exc))
@@ -108,6 +113,8 @@ def localize(inp: Kio2Input) -> FaultLocalization:
     status = "DONE" if confidence >= _HITL_THRESHOLD else "REVIEW_REQUIRED"
     top = suspects[0]
     msg = f"Localised to {top.function} L{top.line}: {top.source}  ({len(suspects)} suspect statement(s))"
+    if notes:
+        msg += "  [" + "; ".join(notes) + "]"
 
     return FaultLocalization(
         status=status,

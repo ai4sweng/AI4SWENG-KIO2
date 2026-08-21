@@ -9,6 +9,7 @@ the trace and still exits cleanly, so the crash is available for slicing.
 
 from __future__ import annotations
 
+import ast
 import os
 import subprocess
 import sys
@@ -16,9 +17,83 @@ import tempfile
 import uuid
 from pathlib import Path
 
+#: Cap on auto-discovered trace targets. Each one becomes a ``--function`` flag,
+#: and Windows caps a command line at ~32 000 characters; 400 names leaves ample
+#: headroom. Exceeding it is reported rather than silently truncated.
+MAX_AUTO_TARGETS = 400
+
+#: Directories that never contain the program under analysis.
+_SKIP_DIRS = frozenset({
+    ".git", ".hg", ".svn", "__pycache__", ".venv", "venv", "env", ".env",
+    "node_modules", "site-packages", "build", "dist", ".tox", ".nox",
+    ".mypy_cache", ".pytest_cache", ".ruff_cache", ".idea", ".vscode",
+})
+
 
 class RunnerError(RuntimeError):
     """Raised when the target could not be traced."""
+
+
+def discover_functions(
+    target_script: str | Path,
+    working_directory: str | Path = "",
+    *,
+    limit: int = MAX_AUTO_TARGETS,
+) -> tuple[list[str], list[str]]:
+    """Find the functions to trace when the caller did not name any.
+
+    KIO2's callers know *which run failed*, not *which functions to instrument* —
+    an upstream KIO hands over a failing test or a runtime log, never a function
+    list. The engine, however, requires explicit function targets (file-only
+    activation is not supported), and its own "trace everything" fallback only
+    looks inside the entry script. A realistic entry point (``main.py`` that just
+    calls into a package) defines no functions at all, so that fallback finds
+    nothing and the run fails.
+
+    This closes the gap on the KIO2 side: statically collect every function and
+    method defined under the project root, entry script first.
+
+    Returns ``(functions, notes)``. ``notes`` carries anything the caller should
+    surface to a human — currently only that the limit truncated the list.
+    """
+    script = Path(target_script)
+    root = Path(working_directory) if working_directory else script.parent
+    if not root.is_dir():
+        root = script.parent
+
+    # Entry script first, then its siblings, then the rest of the tree — so a
+    # truncated list keeps the code nearest the entry point.
+    ordered: list[Path] = []
+    if script.is_file() and script.suffix == ".py":
+        ordered.append(script.resolve())
+    for path in sorted(root.rglob("*.py")):
+        if any(part in _SKIP_DIRS for part in path.parts):
+            continue
+        resolved = path.resolve()
+        if resolved not in ordered:
+            ordered.append(resolved)
+    ordered.sort(key=lambda p: (p.parent != script.resolve().parent, str(p)))
+
+    names: list[str] = []
+    seen: set[str] = set()
+    for path in ordered:
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"), filename=str(path))
+        except (OSError, SyntaxError):
+            continue  # unreadable or not valid Python — not our program to fix
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name not in seen:
+                seen.add(node.name)
+                names.append(node.name)
+
+    notes: list[str] = []
+    if len(names) > limit:
+        notes.append(
+            f"auto-discovered {len(names)} functions under {root}; traced the first "
+            f"{limit} (nearest the entry point). Pass 'functions' explicitly to control this."
+        )
+        names = names[:limit]
+    return names, notes
 
 
 def _subprocess_env() -> dict[str, str]:
@@ -51,12 +126,17 @@ def run_trace(
     output_path: str | None = None,
     timeout: float = 180.0,
     python_executable: str | None = None,
+    notes: list[str] | None = None,
 ) -> str:
     """Trace ``target_script`` and return the path to the produced XML trace.
 
     Runs ``python -m focustracer run`` in a subprocess. ``working_directory``,
     if given, is used both as the process cwd and as the FocusTracer project
     root. Raises :class:`RunnerError` if no non-empty trace is produced.
+
+    ``functions`` empty (or omitted) means *trace everything*: the targets are
+    discovered from the project with :func:`discover_functions`. Pass ``notes``
+    (a list) to receive any human-readable remarks about that discovery.
     """
     script = Path(target_script)
     if working_directory:
@@ -72,6 +152,17 @@ def run_trace(
     if output_path is None:
         output_path = str(Path(tempfile.gettempdir()) / f"kio2_{uuid.uuid4().hex}.xml")
 
+    targets = list(functions or [])
+    if not targets:
+        targets, auto_notes = discover_functions(script, working_directory or script.parent)
+        if not targets:
+            raise RunnerError(
+                f"no functions found to trace under {working_directory or script.parent}. "
+                "The engine needs at least one function target; pass 'functions' explicitly."
+            )
+        if notes is not None:
+            notes.extend(auto_notes)
+
     cmd = [
         python_executable or sys.executable, "-m", "focustracer", "run",
         "--target-script", str(script),
@@ -81,7 +172,7 @@ def run_trace(
     ]
     if working_directory:
         cmd += ["--project-root", str(Path(working_directory))]
-    for fn in functions or []:
+    for fn in targets:
         cmd += ["--function", fn]
 
     try:

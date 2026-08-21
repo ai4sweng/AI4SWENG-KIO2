@@ -1,1 +1,243 @@
-This file
+# KIO2 — component breakdown
+#
+# Machine-readable companion to docs/TECHNICAL_DOCUMENTATION.md (prose) and
+# docs/INTEGRATION.md (how to call it). Kept in sync with src/kio2/ by hand.
+
+kio: kio2
+title: "Bug Locate & Fix: Reverse Execution & Dynamic Slicing"
+owner: BITNET
+contributors: [HESSO]
+version: 1.0.6                  # matches pyproject / kio2.__version__
+language: python
+python_requires: ">=3.10"
+
+deployment:
+  kind: containerised-http-service
+  # No UI of its own: per D2.6 the KIO1 orchestrator owns the GUI/CLI and KIOs
+  # are services behind it (NFR-KIO1-03, "scale horizontally across all KIO services").
+  port: 8013                          # KIO1 registers 8102 — run with KIO_PORT=8102
+  env: [KIO_PORT, KIO_HOST, KIO2_TRACE_BUDGET, KIO2_TRACE_DIR]
+  entrypoint: "uvicorn kio2.main:app"
+  modes:
+    - name: docker
+      how: "docker run -p 8102:8102 -e KIO_PORT=8102 ai4sweng-kio2"
+      verified: false          # no Docker daemon available during development
+    - name: standalone
+      how: "python -m kio2.main"
+      verified: true
+    - name: platform-shell
+      how: "make_app() detects kio_base and upgrades to NATS + HITL + capability announcements"
+      verified: false          # kio_base not available in this repository
+    - name: library
+      how: "from kio2 import localize, replay, compare"
+      verified: true
+
+engine:
+  name: focustracer
+  relationship: library-dependency      # independent repository, NOT vendored
+  repository: https://github.com/BitnetTR/focustracer
+  branch: master
+  min_version: "1.9"
+  why_pinned: >-
+    KIO2 imports core.slicer / core.reverse / core.explain (1.5-1.6),
+    core.replay and core.align (1.8), and align.TraceSet plus
+    AlignedPair.seek/step/state_delta (1.9). An older engine fails at import.
+  trace_schema: "2.3"                   # slicing requires >= 2.3 and detail=detailed
+
+components:
+  - module: contract.py
+    role: "Input/output models for every task — the interface"
+    depends_on: [pydantic]
+    platform_independent: true
+
+  - module: runner.py
+    role: "Execute the target under the engine to produce a trace; discover trace targets"
+    requirement: FR-KIO2-07
+    depends_on: [focustracer]
+    platform_independent: true
+    notes: >-
+      The only component that executes anything. Also owns static target
+      discovery: the engine requires explicit function targets and its own
+      trace-all fallback only scans the entry script, so KIO2 collects the
+      project's functions itself when the caller names none.
+
+  - module: localizer.py
+    role: "trace -> backward dynamic slice -> ranked suspect statements + crash state"
+    requirement: FR-KIO2-05
+    depends_on: [focustracer, contract, runner]
+    platform_independent: true
+    reads_only: true
+
+  - module: replayer.py
+    role: "Post-mortem navigation over a recorded trace (step into/over/out, forward and backward)"
+    requirement: FR-KIO2-02
+    depends_on: [focustracer, contract]
+    platform_independent: true
+    reads_only: true
+    stateless: true            # caller keeps the cursor; no server-side session
+
+  - module: comparator.py
+    role: "Align traces of one program; curate N of them as a set"
+    requirement: FR-KIO2-03
+    depends_on: [focustracer, contract]
+    platform_independent: true
+    reads_only: true
+
+  - module: kio1.py
+    role: "KIO1 dispatch-protocol adapter — envelope translation and capability mapping"
+    depends_on: [contract, localizer, replayer, comparator]
+    platform_independent: false          # adapter layer
+    notes: >-
+      Pure translation: the domain modules know nothing about KIO1. Also owns the
+      portable `trace_ref` (an encoded path, restricted to KIO2_TRACE_DIR), the
+      recording budget that keeps KIO2 inside KIO1's 60 s dispatch window, and the
+      explicit refusal of `fix_recommendation`.
+
+  - module: observability.py
+    role: "Optional OpenTelemetry spans and metrics; no-op when OTel is absent"
+    depends_on: []
+    platform_independent: true
+
+  - module: service.py
+    role: "KIO handler + app factory (platform shell or standalone FastAPI)"
+    depends_on: [fastapi, localizer, replayer, comparator, observability]
+    platform_independent: false          # adapter layer
+
+  - module: dummy.py + examples/
+    role: "Bundled failing example so the service runs end to end with no mounted repo"
+    platform_independent: true
+
+api:
+  - path: /execute
+    method: POST
+    purpose: >-
+      Two envelopes on one path, told apart by body shape: a KIO1 execution
+      message (workflow_id / step_id / capability / task / data) is answered in
+      KIO1's reply shape; anything else is KIO2's own {session_id, payload}
+      contract answered as a JOB_RESULT.
+  - path: /health
+    method: GET
+    purpose: "Liveness. KIO1 probes this spelling; /health/ is also registered."
+  - path: /health/
+    method: GET
+    purpose: "Same body; the spelling KIO2's own docs use"
+  - path: /tasks
+    method: GET
+    purpose: "Capability discovery in both vocabularies (capabilities + supported_tasks)"
+
+tasks:
+  - task_type: fault_localization
+    requirement: FR-KIO2-05
+    input: Kio2Input
+    output: FaultLocalization
+    default: true
+  - task_type: replay
+    requirement: FR-KIO2-02
+    input: ReplayInput
+    output: ReplayView
+  - task_type: trace_alignment
+    requirement: FR-KIO2-03
+    input: AlignInput
+    output: TraceComparison
+
+kio1_protocol:
+  # kio1.orchestrator/docs/connecting-a-kio.md
+  registered_port: 8102               # KIO2's own default is 8013; run with KIO_PORT=8102
+  request_fields: [workflow_id, step_id, agent_id, capability, endpoint, task, data]
+  reply_fields: [workflow_id, step_id, agent_id, status, output, error]
+  always_http_200: true               # a non-2xx means "the service is broken", not "the task failed"
+  capabilities:
+    - name: bug_localization
+      maps_to: fault_localization
+      requirement: FR-KIO2-05
+    - name: diagnosis
+      maps_to: fault_localization + trace_alignment
+      requirement: FR-KIO2-05
+      notes: "Produces slice_context — the evidence KIO7 needs for a fix"
+    - name: replay
+      maps_to: replay
+      requirement: FR-KIO2-02
+    - name: trace_alignment
+      maps_to: trace_alignment
+      requirement: FR-KIO2-03
+  refused_capabilities:
+    - name: fix_recommendation
+      reason: >-
+        Declared for KIO2 in KIO1's config today, but D2.6 UC-UC1-03 makes fix
+        generation KIO7's step. Answered with status "error" and a pointer to
+        `diagnosis` rather than a plausible-looking guess.
+  trace_ref:
+    format: "kio2://trace/<urlsafe-base64 of the absolute path>"
+    stateless: true                   # any replica sharing the trace directory resolves it
+    restricted_to: KIO2_TRACE_DIR     # the adapter is the network edge
+  trace_budget_seconds: 45            # KIO2_TRACE_BUDGET; must stay under KIO1's 60 s timeout
+  traceparent: adopted                # not yet verified against a live collector
+
+telemetry:
+  spans:
+    - kio2.localize
+    - kio2.replay
+    - kio2.trace_alignment
+    - kio1.<capability>              # one per dispatched KIO1 step
+  inbound_trace_context: traceparent  # adopted so KIO2's spans join KIO1's trace
+  metrics:
+    - kio2.localization.duration
+    - kio2.localization.suspect_count
+    - kio2.localization.confidence
+    - kio2.localization.runs
+    - kio2.task.duration          # tagged with task_type
+    - kio2.task.runs              # tagged with task_type
+  exporter: "not configured by KIO2 — the host wires OTLP via standard env vars"
+  open:
+    - "kio.slicing.success_rate not emitted yet (WP3 KPI, target >= 0.85)"
+    - "publish_progress not called, so the platform dashboard shows no live progress"
+
+pipeline_position:
+  # Per D2.6 UC-UC1-03 (p.83). See docs/INTEGRATION.md section 8 — D2.6 is not
+  # internally consistent about KIO2's role and this is the reading we built to.
+  upstream: KIO11              # confirms the failure
+  downstream: KIO7             # proposes the fix from handoff_context
+  orchestrator: KIO1
+  contested: true
+  contested_note: >-
+    Four other D2.6 references (p.37, p.91, p.99, p.100) and all four KIO chains
+    (p.80-81) place KIO2 after KIO7 and assign it fixing or verification duties.
+    Direction must be agreed before the orchestrator is wired.
+
+constraints:
+  - "Python only — FR-KIO2-01 permits 'Python and/or C'; the PoC selected Python. UC3 (C++/HLS) is therefore out of scope."
+  - "Requires a runnable entry point; D2.6 specifies the input as failing test results or runtime logs. The mapping is unowned."
+  - "Trace detail must be 'detailed' and schema >= 2.3 for slicing and replay."
+  - "Tracing times out after 180 s."
+  - "Trace files accumulate in the system temp directory; no retention policy."
+  - "The service executes the code under analysis — deploy the container as a sandbox."
+
+quality_gates:
+  ci: .github/workflows/ci.yml     # ruff + pytest, Python 3.11 and 3.12
+  tests:
+    kio2: 92
+    focustracer: 114
+  requirement_acceptance_tests:
+    FR-KIO2-01: tests/test_fr_kio2_01_language_support.py
+    FR-KIO2-02: tests/test_fr_kio2_02_replay.py
+    FR-KIO2-03: tests/test_fr_kio2_03_alignment.py
+    FR-KIO2-07: tests/test_fr_kio2_07_trace_recorder.py
+  integration_tests:
+    kio1_protocol: tests/test_kio1_protocol.py
+    http_contract: tests/test_http_contract.py
+    target_discovery: tests/test_target_discovery.py
+
+requirement_status:
+  FR-KIO2-01: satisfied
+  FR-KIO2-02: satisfied            # DAP and LSP deferred beyond the PoC
+  FR-KIO2-03: satisfied            # Objective/Input/Output/Invariant; the Description's ML pipeline is deferred
+  FR-KIO2-04: partial              # HESSO — state inspection only; no expression evaluator or mocks
+  FR-KIO2-05: partial              # HESSO — slicing-based; ML anomaly over trace sets not built (now unblocked)
+  FR-KIO2-06: not-started          # HESSO
+  FR-KIO2-07: satisfied
+  FR-KIO2-08: out-of-scope         # AI4 / UREAD, depends on all FR-KIO1
+  NFR-KIO2-01: not-started         # BITNET — performance benchmarks and CI gates
+  NFR-KIO2-02: not-started         # HESSO — needs a labelled bug dataset
+  NFR-KIO2-03: partial             # layered package + Dockerfile; API versioning, registry, rollback open
+  Task-KIO2-01: not-started        # spec file empty, no owner assigned
+  Task-KIO2-02: not-started        # spec file empty, no owner assigned

@@ -42,6 +42,11 @@ class Kio2Input(BaseModel):
     failing_test: str | None = Field(None, description="Failing test / error context from upstream (optional)")
     detail: str = Field("detailed", description="Trace detail level (needs 'detailed' for slicing)")
     schema_version: str = Field("2.3", description="Trace schema (slicing needs >= 2.3)")
+    trace_timeout: float | None = Field(
+        None,
+        description="Seconds to allow for recording; None uses the runner default. "
+                    "Callers with their own deadline (KIO1 waits 60 s) should set it lower.",
+    )
 
     def to_payload(self) -> dict[str, Any]:
         return _dump(self)
