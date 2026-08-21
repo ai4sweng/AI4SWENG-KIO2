@@ -23,7 +23,7 @@ This repository centralizes all assets related to the development, documentation
 | ├── `requirements/`     | Markdown files for each requirement (e.g. `FR-KIO2-01.md`)                  |
 | └── `architecture/`     | Diagrams, high-level design, and component breakdown                        |
 | `src/`                  | Source code, scripts, or prototype implementations                          |
-| `.github/workflows/`    | GitHub Actions — `ci.yml` (ruff + pytest gates) and issue-to-project routing |
+| `.github/workflows/`    | GitHub Actions — `ci.yml` (ruff + pytest gates)                              |
 
 ---
 
@@ -58,13 +58,25 @@ Columns include:
 
 ## 🔁 Automation
 
-All issues are auto-routed based on title or label:
+Issues are routed to the board by title or label:
+
 | Title Prefix / Label   | Routed Column   |
 |------------------------|-----------------|
 | `[REQ]`, `requirement` | `Requirements`  |
 | `[TASK]`               | `Backlog`       |
 
-Automation logic is located in [`.github/workflows/smart-issue-to-project.yml`](.github/workflows/smart-issue-to-project.yml).
+This is configured in **GitHub Projects itself** — Project → Settings →
+Workflows — not with a GitHub Action. An Action cannot do it with the default
+`GITHUB_TOKEN`: organization-level ProjectsV2 needs a token with `project`
+scope, which `GITHUB_TOKEN` does not have and `permissions:` cannot grant.
+
+> A `smart-issue-to-project.yml` workflow used to sit here. It was never a valid
+> workflow file — a Python generator script had been committed in place of its
+> output — so it only ever produced *"Invalid workflow file"* notifications on
+> every push. Removed; use the Project's own workflows instead.
+
+The only GitHub Action in this repository is
+[`ci.yml`](.github/workflows/ci.yml): `ruff` + `pytest` on every push and PR.
 
 ---
 
