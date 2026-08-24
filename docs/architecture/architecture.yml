@@ -20,7 +20,7 @@ deployment:
   entrypoint: "uvicorn kio2.main:app"
   modes:
     - name: docker
-      how: "docker run -p 8102:8102 -e KIO_PORT=8102 ai4sweng-kio2"
+      how: "docker run -p 8102:8102 ai4sweng-kio2"   # image listens on 8102
       verified: false          # no Docker daemon available during development
     - name: standalone
       how: "python -m kio2.main"
@@ -142,7 +142,8 @@ tasks:
 
 kio1_protocol:
   # kio1.orchestrator/docs/connecting-a-kio.md
-  registered_port: 8102               # KIO2's own default is 8013; run with KIO_PORT=8102
+  registered_port: 8102               # KIO1 config.json; scheme is KIO2 -> 8102, KIO10 -> 8110
+  local_default_port: 8013            # bare `python -m kio2.main` outside a container
   request_fields: [workflow_id, step_id, agent_id, capability, endpoint, task, data]
   reply_fields: [workflow_id, step_id, agent_id, status, output, error]
   always_http_200: true               # a non-2xx means "the service is broken", not "the task failed"

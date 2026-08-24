@@ -53,6 +53,17 @@ def localize(inp: Kio2Input) -> FaultLocalization:
             trace_path, at_exception=at_exception, at=inp.criterion, include_control=True
         )
     except ValueError as exc:
+        # A target that ran to completion is not an analysis failure — there was
+        # simply nothing to localise. Callers ask KIO2 to check code that may or
+        # may not be broken (an orchestrator step, a CI hook), so "clean run" has
+        # to be a successful answer; reporting it as FAILED would make every
+        # healthy program look like a broken service.
+        if at_exception and not _has_recorded_exception(trace_path):
+            return FaultLocalization(
+                status="DONE", trace_path=trace_path, confidence=1.0,
+                message="No runtime defect observed: the target ran to completion "
+                        "without raising. Nothing to localise.",
+            )
         return FaultLocalization(
             status="FAILED", trace_path=trace_path,
             message="Slicing failed — the trace has no exception/criterion or no reads (needs detailed, schema>=2.3).",
@@ -127,6 +138,19 @@ def localize(inp: Kio2Input) -> FaultLocalization:
         trace_path=trace_path,
         message=msg,
     )
+
+
+def _has_recorded_exception(trace_path: str) -> bool:
+    """Did the recorded run raise? Distinguishes a clean run from an unusable trace.
+
+    Only consulted when slicing at the crash has already failed, so the extra
+    reconstruction costs nothing on the normal path.
+    """
+    try:
+        reverse_trace(trace_path, at_exception=True, step_back=0)
+        return True
+    except Exception:  # noqa: BLE001 — any failure here means "no usable exception"
+        return False
 
 
 def _line_of(criterion: str | None) -> int | None:

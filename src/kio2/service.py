@@ -291,7 +291,23 @@ def _standalone_app(kio_id: str, title: str):
             "supported_tasks": _SUPPORTED_TASKS,        # KIO2's own contract
             "capabilities": kio1.CAPABILITIES,          # register these in KIO1's config.json
             "unsupported_capabilities": sorted(kio1.UNSUPPORTED_CAPABILITIES),
+            "schema_url": "/schema",
         }
+
+    @app.get("/schema")
+    async def schema(name: str | None = None) -> dict[str, Any]:
+        """The request/response contract, so a caller can validate against it.
+
+        Published rather than merely documented: the orchestrator can fetch it at
+        integration time instead of reproducing the shapes by hand.
+        """
+        from fastapi import HTTPException
+        if name is None:
+            return kio1.all_schemas()
+        try:
+            return kio1.load_schema(name)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post("/execute")
     async def execute(body: dict[str, Any]) -> dict[str, Any]:

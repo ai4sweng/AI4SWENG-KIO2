@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai4sweng.eu/schemas/kio2.response.schema.json",
+  "title": "KIO2 reply",
+  "description": "What KIO2 returns for an execution message. The shared KIO1-KIO10 protocol document defines the request but not the reply; this is the reply contract KIO2 implements, matching the orchestrator's reference agent. Always delivered with HTTP 200: a non-2xx response means the service is unavailable, which is a different condition from the task having failed. KIO2's own test suite validates real replies against this schema, so it is an enforced contract rather than documentation.",
+  "type": "object",
+  "required": ["workflow_id", "step_id", "agent_id", "status", "output", "error"],
+  "additionalProperties": false,
+  "properties": {
+    "workflow_id": { "type": "string", "description": "Echoed from the request." },
+    "step_id": { "type": "string", "description": "Echoed from the request." },
+    "agent_id": { "type": "string", "const": "KIO2" },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "error"],
+      "description": "Always set explicitly. An absent status is read as success by the orchestrator, which would record a failed step as a successful one with no result."
+    },
+    "output": {
+      "description": "Result of the requested capability, or null when status is \"error\". The shape is KIO2's to define; the orchestrator stores it verbatim and passes it to dependent steps as data.upstream.<step_id>.",
+      "oneOf": [
+        { "$ref": "#/$defs/localizationOutput" },
+        { "$ref": "#/$defs/diagnosisOutput" },
+        { "$ref": "#/$defs/replayOutput" },
+        { "$ref": "#/$defs/alignmentOutput" },
+        { "type": "null" }
+      ]
+    },
+    "error": {
+      "type": ["string", "null"],
+      "description": "Why the task could not be completed. Null when status is \"ok\"."
+    }
+  },
+  "$defs": {
+    "verdict": {
+      "type": "string",
+      "enum": ["defect", "clean", "inconclusive"],
+      "description": "The answer to \"is something wrong here?\", in one field, so a consumer does not need to know where KIO2 sits in the workflow. \"defect\": statements were implicated. \"clean\": the target ran to completion, nothing to localise — a successful outcome, not an error. \"inconclusive\": the run was analysed but no statement could be attributed; treat as needing human review."
+    },
+    "traceRef": {
+      "type": ["string", "null"],
+      "description": "Handle for the recording this result came from, of the form kio2://trace/<token>. Pass it back as data.trace_ref to replay or compare the same execution.",
+      "examples": ["kio2://trace/L3RtcC9raW8yXzlmMmMueG1s"]
+    },
+    "finding": {
+      "type": "object",
+      "description": "One statement implicated in the failure, with the evidence for it.",
+      "required": ["file", "function", "line", "confidence", "dependency", "description"],
+      "additionalProperties": true,
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "Source file, relative to the repository root, POSIX-separated. Absolute paths from inside KIO2's container carry no meaning for the caller and would expose the deployment layout."
+        },
+        "function": { "type": "string" },
+        "line": { "type": "integer", "minimum": 1 },
+        "confidence": {
+          "type": "number", "minimum": 0, "maximum": 1,
+          "description": "The run's confidence weighted by this statement's evidence strength, so the leading finding carries the confidence of the analysis as a whole."
+        },
+        "score": {
+          "type": "number", "minimum": 0, "maximum": 1,
+          "description": "Evidence weight of the dependency kind alone."
+        },
+        "dependency": {
+          "type": "string",
+          "enum": ["criterion", "control", "data"],
+          "description": "Why this statement is on the slice: it is the failing statement itself, a control-flow decision that led there, or data feeding it."
+        },
+        "description": { "type": "string", "description": "The source line as recorded." }
+      }
+    },
+    "recordedState": {
+      "type": "object",
+      "description": "Variable values as recorded, keyed by name. Values are the reprs captured at runtime, not live objects.",
+      "additionalProperties": { "type": ["string", "null"] }
+    },
+    "localizationOutput": {
+      "type": "object",
+      "title": "bug_localization",
+      "required": ["summary", "verdict", "defect_found", "findings", "trace_ref"],
+      "additionalProperties": true,
+      "properties": {
+        "summary": { "type": "string" },
+        "verdict": { "$ref": "#/$defs/verdict" },
+        "defect_found": { "type": "boolean", "description": "Convenience mirror of verdict == \"defect\"." },
+        "findings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/finding" },
+          "description": "Implicated statements, strongest evidence first. Empty when the target ran cleanly."
+        },
+        "crash_state": { "$ref": "#/$defs/recordedState" },
+        "criterion": { "type": "string", "description": "Where the analysis started, e.g. exception@shop/pricing.py:11." },
+        "slice_size": { "type": "integer", "minimum": 0 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "trace_ref": { "$ref": "#/$defs/traceRef" },
+        "hitl_required": {
+          "type": "boolean",
+          "description": "True when the result is too weak to act on unreviewed."
+        }
+      }
+    },
+    "diagnosisOutput": {
+      "type": "object",
+      "title": "diagnosis",
+      "required": ["summary", "verdict", "root_cause", "evidence", "slice_context"],
+      "additionalProperties": true,
+      "properties": {
+        "summary": { "type": "string" },
+        "verdict": { "$ref": "#/$defs/verdict" },
+        "defect_found": { "type": "boolean" },
+        "root_cause": {
+          "type": "string",
+          "description": "Read off the recording, not inferred by a language model: the statement that failed, the values in scope, and the statements that produced them."
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind", "detail"],
+            "additionalProperties": true,
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["recorded_value", "divergence", "value_difference"],
+                "description": "A value captured at the failure, a stretch executed by only one of two runs, or a variable whose recorded value differs between them."
+              },
+              "at": { "type": "string" },
+              "detail": { "type": "string" }
+            }
+          }
+        },
+        "compared_runs": {
+          "type": "integer", "minimum": 1,
+          "description": "1 for the failing run alone; 2 when a reference run was supplied."
+        },
+        "slice_context": {
+          "type": "string",
+          "description": "The value-annotated program slice. This is KIO2's contribution to fix generation: hand it to KIO7 rather than asking KIO2 for a patch."
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "trace_ref": { "$ref": "#/$defs/traceRef" },
+        "hitl_required": { "type": "boolean" }
+      }
+    },
+    "replayOutput": {
+      "type": "object",
+      "title": "replay",
+      "required": ["summary", "cursor", "total", "current"],
+      "additionalProperties": true,
+      "properties": {
+        "summary": { "type": "string" },
+        "cursor": {
+          "type": "integer", "minimum": 0,
+          "description": "Position on the timeline. Stateless: send it back as data.seq to continue from here."
+        },
+        "total": { "type": "integer", "minimum": 0 },
+        "can_forward": { "type": "boolean" },
+        "can_back": { "type": "boolean" },
+        "current": {
+          "type": "object",
+          "description": "The executed statement at the cursor and the state recorded there.",
+          "required": ["function", "line", "source", "state"],
+          "additionalProperties": true,
+          "properties": {
+            "function": { "type": "string" },
+            "file": { "type": "string" },
+            "line": { "type": "integer" },
+            "source": { "type": "string" },
+            "depth": { "type": "integer", "description": "Call-stack depth; what step over and step out are computed from." },
+            "state": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": { "value": { "type": "string" }, "type": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "timeline": {
+          "type": "array",
+          "description": "Neighbouring line-events, for a scrubber.",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "def_of": {
+          "type": ["object", "null"],
+          "description": "The statement that last gave a requested variable its value (def-use).",
+          "additionalProperties": true
+        },
+        "trace_ref": { "$ref": "#/$defs/traceRef" }
+      }
+    },
+    "alignmentOutput": {
+      "type": "object",
+      "title": "trace_alignment",
+      "required": ["summary", "mode", "trace_refs"],
+      "additionalProperties": true,
+      "properties": {
+        "summary": { "type": "string" },
+        "mode": {
+          "type": "string",
+          "enum": ["pair", "set"],
+          "description": "\"pair\" for two traces, \"set\" for three or more."
+        },
+        "distance": {
+          "type": "integer", "minimum": 0,
+          "description": "Alignment cost between two runs. 0 for identical executed-statement sequences — the FR-KIO2-03 invariant. Compares control flow: two runs taking the same path with different data have distance 0, and that difference appears in delta."
+        },
+        "normalized_distance": { "type": "number", "minimum": 0, "maximum": 1 },
+        "matched": { "type": "integer", "minimum": 0 },
+        "gaps": { "type": "integer", "minimum": 0 },
+        "aligned": { "type": "boolean", "description": "Whether the cursor position exists in both runs." },
+        "delta": {
+          "type": "array",
+          "description": "Variables whose recorded values differ at the aligned point.",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": true,
+            "properties": {
+              "name": { "type": "string" },
+              "a": { "type": ["string", "null"] },
+              "b": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "divergences": {
+          "type": "array",
+          "description": "Contiguous stretches executed by only one of the two runs.",
+          "items": {
+            "type": "object",
+            "required": ["side", "start", "end", "length"],
+            "additionalProperties": true,
+            "properties": {
+              "side": { "type": "string", "enum": ["a", "b"] },
+              "start": { "type": "integer" },
+              "end": { "type": "integer" },
+              "length": { "type": "integer" },
+              "at": { "type": ["integer", "null"] }
+            }
+          }
+        },
+        "matrix": {
+          "type": "array",
+          "description": "Pairwise normalized distances for a set: symmetric, zero on the diagonal.",
+          "items": { "type": "array", "items": { "type": "number" } }
+        },
+        "lengths": { "type": "array", "items": { "type": "integer" } },
+        "reference": {
+          "type": ["integer", "null"],
+          "description": "Index of the medoid — the most representative run of the set."
+        },
+        "outlier": {
+          "type": ["integer", "null"],
+          "description": "Index of the run furthest from the reference. With a set of runs and no labels, this is the one to look at first."
+        },
+        "mean_distance": { "type": "number", "minimum": 0 },
+        "reference_trace_ref": { "$ref": "#/$defs/traceRef" },
+        "outlier_trace_ref": { "$ref": "#/$defs/traceRef" },
+        "trace_refs": { "type": "array", "items": { "$ref": "#/$defs/traceRef" } }
+      }
+    }
+  }
+}

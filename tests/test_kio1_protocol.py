@@ -318,3 +318,202 @@ def test_health_answers_both_spellings(client):
         body = client.get(path).json()
         assert body["status"] == "ok"
         assert body["agent_id"] == "KIO2"
+
+
+# ── the integration document's vocabulary and the clean-run outcome ─────────
+
+
+HEALTHY = '''
+def net_price(item):
+    return item["price"] * item["qty"]
+
+
+def order_total(items):
+    return sum(net_price(i) for i in items)
+
+
+if __name__ == "__main__":
+    print(order_total([{"price": 10, "qty": 2}]))
+'''
+
+
+@pytest.fixture(scope="module")
+def healthy_repo(tmp_path_factory):
+    """A program that runs to completion — nothing to localise."""
+    root = tmp_path_factory.mktemp("healthy")
+    (root / "app.py").write_text(HEALTHY, encoding="utf-8")
+    return root
+
+
+def test_a_clean_run_is_a_successful_answer(client, healthy_repo):
+    """"Nothing wrong here" must not look like a broken service call.
+
+    The KIO1-KIO2 integration document has KIO2 analysing freshly generated code,
+    which will usually run fine. Reporting that as an error would fail every step.
+    """
+    body = client.post("/execute", json=message(
+        kio1.CAP_BUG_LOCALIZATION,
+        repository={"path": str(healthy_repo)}, target={"entry_point": "app.py"},
+    )).json()
+    assert body["status"] == "ok", body["error"]
+    assert body["output"]["defect_found"] is False
+    assert body["output"]["findings"] == []
+    assert "without raising" in body["output"]["summary"]
+
+
+def test_a_crashing_run_still_reports_a_defect(client, repo):
+    body = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()
+    assert body["output"]["defect_found"] is True
+
+
+def test_diagnosis_of_a_clean_run_attributes_nothing(client, healthy_repo):
+    out = client.post("/execute", json=message(
+        kio1.CAP_DIAGNOSIS,
+        repository={"path": str(healthy_repo)}, target={"entry_point": "app.py"},
+    )).json()["output"]
+    assert out["defect_found"] is False
+    assert "no faulty statement" in out["root_cause"]
+
+
+def test_document_field_names_are_accepted(client, repo):
+    """`source_location` / `bug_report` — the integration document's vocabulary."""
+    body = client.post("/execute", json=message(
+        kio1.CAP_BUG_LOCALIZATION,
+        source_artifact="fastapi-shift-service",
+        source_location=str(repo),
+        entrypoint="main.py",
+        execution_trace=None,
+        bug_report="tests/test_order.py::test_bronze_tier — KeyError: 'bronze'",
+    )).json()
+    assert body["status"] == "ok", body["error"]
+    assert body["output"]["findings"][0]["file"] == "shop/pricing.py"
+
+
+def test_execution_trace_field_feeds_replay(client, repo):
+    """The document lists `execution_trace` as an input; it is a trace reference."""
+    first = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()
+    body = client.post("/execute", json=message(
+        kio1.CAP_REPLAY, execution_trace=first["output"]["trace_ref"], at_exception=True,
+    )).json()
+    assert body["status"] == "ok", body["error"]
+    assert body["output"]["current"]["state"]
+
+
+def test_an_artifact_name_alone_is_not_enough(client):
+    """The document's placeholder message cannot be fulfilled — say why, clearly."""
+    body = client.post("/execute", json=message(
+        kio1.CAP_BUG_LOCALIZATION,
+        source_artifact="fastapi-shift-service", source_location="...",
+        execution_trace=None, bug_report=None,
+    )).json()
+    assert body["status"] == "error"
+    assert "entry point" in body["error"]
+
+
+# ── the published contract ──────────────────────────────────────────────────
+
+jsonschema = pytest.importorskip("jsonschema")
+
+
+@pytest.fixture(scope="module")
+def response_schema():
+    return kio1.load_schema("response")
+
+
+def _validates(instance, schema):
+    """Raise with a readable path if the instance does not satisfy the schema."""
+    jsonschema.validate(instance=instance, schema=schema)
+    return True
+
+
+def test_published_schemas_are_valid_json_schema():
+    for name in kio1.SCHEMAS:
+        schema = kio1.load_schema(name)
+        jsonschema.Draft202012Validator.check_schema(schema)
+        assert schema["$id"].endswith(f"kio2.{name}.schema.json")
+
+
+def test_schemas_are_served_over_http(client):
+    body = client.get("/schema").json()
+    assert set(body) == set(kio1.SCHEMAS)
+    assert client.get("/schema", params={"name": "response"}).json()["title"] == "KIO2 reply"
+    assert client.get("/schema", params={"name": "nope"}).status_code == 404
+    assert client.get("/tasks").json()["schema_url"] == "/schema"
+
+
+def test_every_capability_reply_matches_the_published_schema(
+    client, repo, healthy_repo, response_schema
+):
+    """The schema is a contract, not documentation: real replies are checked."""
+    localized = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()
+    ref = localized["output"]["trace_ref"]
+    replies = [
+        localized,
+        client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION,
+                                             repository={"path": str(healthy_repo)},
+                                             target={"entry_point": "app.py"})).json(),
+        client.post("/execute", json=message(kio1.CAP_DIAGNOSIS, repo)).json(),
+        client.post("/execute", json=message(kio1.CAP_REPLAY, trace_ref=ref,
+                                             at_exception=True)).json(),
+        client.post("/execute", json=message(kio1.CAP_TRACE_ALIGNMENT,
+                                             trace_refs=[ref, ref])).json(),
+        client.post("/execute", json=message(kio1.CAP_FIX_RECOMMENDATION)).json(),  # error path
+        client.post("/execute", json=message("time_travel")).json(),
+    ]
+    for reply in replies:
+        assert _validates(reply, response_schema)
+
+
+def test_the_documents_own_message_validates_against_the_request_schema():
+    """The message shape published in the integration document is well formed."""
+    request_schema = kio1.load_schema("request")
+    jsonschema.validate(
+        instance={
+            "workflow_id": "wf-fastapi-shifts-001",
+            "step_id": "s8",
+            "agent_id": "KIO2",
+            "capability": "bug_localization",
+            "endpoint": "http://kio2:8102",
+            "task": "Analyze the generated service for runtime defects.",
+            "data": {
+                "source_artifact": "fastapi-shift-service",
+                "repository": {"path": "/work/repo"},
+                "target": {"entry_point": "reproduce.py", "functions": []},
+                "failure": {"test_id": "tests/test_shift.py::test_overlap",
+                            "exception_type": "AssertionError"},
+            },
+        },
+        schema=request_schema,
+    )
+
+
+def test_request_schema_flags_a_localization_without_an_entry_point():
+    """The gap the placeholder message had: nothing states what to run."""
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            instance={"capability": "bug_localization",
+                      "data": {"source_artifact": "svc", "source_location": "..."}},
+            schema=kio1.load_schema("request"),
+        )
+
+
+# ── verdict: one field a consumer can act on, whatever the step order ───────
+
+
+def test_verdict_is_defect_when_statements_are_implicated(client, repo):
+    out = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()["output"]
+    assert out["verdict"] == "defect"
+    assert out["defect_found"] is True
+
+
+def test_verdict_is_clean_for_a_healthy_program(client, healthy_repo):
+    out = client.post("/execute", json=message(
+        kio1.CAP_BUG_LOCALIZATION,
+        repository={"path": str(healthy_repo)}, target={"entry_point": "app.py"},
+    )).json()["output"]
+    assert out["verdict"] == "clean"
+
+
+def test_diagnosis_carries_the_same_verdict(client, repo):
+    out = client.post("/execute", json=message(kio1.CAP_DIAGNOSIS, repo)).json()["output"]
+    assert out["verdict"] == "defect"

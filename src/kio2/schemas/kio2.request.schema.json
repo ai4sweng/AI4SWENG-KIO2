@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai4sweng.eu/schemas/kio2.request.schema.json",
+  "title": "KIO2 execution message",
+  "description": "An execution message dispatched to KIO2 by the KIO1 orchestrator, per the KIO1-KIO10 Integration Strategy and Communication Protocol. This schema states what a well-formed message looks like; KIO2's runtime acceptance is deliberately more lenient (it also honours the field-name aliases listed below and inherits missing values from data.upstream), so a message that fails this schema may still be served. KIO2 never calls another KIO: every input arrives here, and results reach other KIOs only through the orchestrator.",
+  "type": "object",
+  "required": ["capability"],
+  "additionalProperties": true,
+  "properties": {
+    "workflow_id": {
+      "type": "string",
+      "description": "Identifies the workflow. Echoed back unchanged."
+    },
+    "step_id": {
+      "type": "string",
+      "description": "Identifies the step within the workflow. Echoed back unchanged; this is how the orchestrator matches a reply to the step that produced it."
+    },
+    "agent_id": {
+      "type": "string",
+      "const": "KIO2",
+      "description": "The target agent."
+    },
+    "capability": {
+      "type": "string",
+      "enum": ["bug_localization", "diagnosis", "replay", "trace_alignment"],
+      "description": "Which capability is requested. A capability KIO2 has not declared is answered with status \"error\"; notably fix_recommendation is not a KIO2 capability (D2.6 UC-UC1-03 assigns fix generation to KIO7, and KIO2 supplies the evidence for it as diagnosis.slice_context)."
+    },
+    "endpoint": {
+      "type": "string",
+      "description": "KIO2's own address as the orchestrator knows it. Informational."
+    },
+    "task": {
+      "type": "string",
+      "description": "The natural-language instruction. Recorded as failure context when no structured context is supplied."
+    },
+    "depends_on": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Step ids whose output this step consumes. The orchestrator delivers them under data.upstream."
+    },
+    "data": {
+      "type": "object",
+      "description": "Structured input. KIO2 records a real execution, so localization and diagnosis need a runnable entry point: an artifact name and a repository location alone do not state what to run.",
+      "additionalProperties": true,
+      "properties": {
+        "repository": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Repository root, reachable inside the KIO2 container. Used as the working directory and as the scope for trace-target discovery. Alias: data.source_location."
+            },
+            "revision": {
+              "type": "string",
+              "description": "Commit or revision, for traceability."
+            }
+          }
+        },
+        "target": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "entry_point": {
+              "type": "string",
+              "description": "Runnable script, relative to the repository root. Alias: data.entrypoint."
+            },
+            "functions": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Functions to instrument. Leave empty (the expected mode) and KIO2 discovers them from the repository: a caller knows which run failed, not which functions to instrument."
+            }
+          }
+        },
+        "failure": {
+          "type": "object",
+          "description": "Failure context, typically originating from the test-automation step. Alias: data.bug_report (string or object).",
+          "additionalProperties": true,
+          "properties": {
+            "test_id": { "type": "string" },
+            "exception_type": { "type": "string" },
+            "message": { "type": "string" },
+            "traceback": { "type": "string" }
+          }
+        },
+        "criterion": {
+          "type": ["string", "null"],
+          "description": "[FILE:]LINE[:VAR] to analyse a specific value instead of the crash. Null or absent means analyse at the failure."
+        },
+        "reference": {
+          "type": "object",
+          "description": "A passing run of the same program. When given, diagnosis reports how the failing run differed from it.",
+          "additionalProperties": true,
+          "properties": { "trace_ref": { "$ref": "#/$defs/traceRef" } }
+        },
+        "trace_ref": { "$ref": "#/$defs/traceRef" },
+        "trace_refs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/traceRef" },
+          "description": "Recordings to work on. Two for a side-by-side comparison, three or more to curate them as a set."
+        },
+        "execution_trace": {
+          "oneOf": [{ "$ref": "#/$defs/traceRef" }, { "type": "null" }],
+          "description": "The integration document's name for a trace reference. Traces are produced by KIO2 itself and returned in the output of a localization or diagnosis step."
+        },
+        "source_location": {
+          "type": "string",
+          "description": "The integration document's name for the repository root."
+        },
+        "entrypoint": {
+          "type": "string",
+          "description": "The integration document's name for the runnable entry point."
+        },
+        "source_artifact": {
+          "type": "string",
+          "description": "Recorded for traceability. KIO2 needs a path, not an artifact name."
+        },
+        "bug_report": {
+          "type": ["string", "object", "null"],
+          "description": "The integration document's name for the failure context."
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Cursor position on the timeline. Stateless navigation: send back the cursor a previous reply returned."
+        },
+        "at_event": { "type": "integer", "description": "Start at this line-event id." },
+        "at_line": { "type": "integer", "description": "Start at this source line." },
+        "function": { "type": "string", "description": "Disambiguates at_line." },
+        "at_exception": { "type": "boolean", "description": "Start at the recorded failure." },
+        "step": { "type": "integer", "description": "Signed line steps from the start point." },
+        "step_action": {
+          "type": ["string", "null"],
+          "enum": ["into", "over", "out", null],
+          "description": "Debugger step, as in a conventional debugger."
+        },
+        "back": { "type": "boolean", "description": "Apply step_action in reverse." },
+        "window": { "type": "integer", "minimum": 0, "description": "Neighbouring line-events to return around the cursor." },
+        "upstream": {
+          "type": "object",
+          "description": "Outputs of the steps this one depends on, keyed by step id. Filled by the orchestrator. KIO2 reads the entry point, the repository root and any trace reference out of it when they are not given directly, so a declared dependency needs no further wiring.",
+          "additionalProperties": { "type": ["object", "null"] }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "capability": { "enum": ["bug_localization", "diagnosis"] } },
+        "required": ["capability"]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              { "required": ["target"], "properties": { "target": { "required": ["entry_point"] } } },
+              { "required": ["entrypoint"] },
+              { "required": ["upstream"] }
+            ]
+          }
+        },
+        "required": ["data"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "capability": { "const": "replay" } },
+        "required": ["capability"]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              { "required": ["trace_ref"] },
+              { "required": ["trace_refs"] },
+              { "required": ["execution_trace"] },
+              { "required": ["upstream"] }
+            ]
+          }
+        },
+        "required": ["data"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "capability": { "const": "trace_alignment" } },
+        "required": ["capability"]
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              { "required": ["trace_refs"], "properties": { "trace_refs": { "minItems": 2 } } },
+              { "required": ["upstream"] }
+            ]
+          }
+        },
+        "required": ["data"]
+      }
+    }
+  ],
+  "$defs": {
+    "traceRef": {
+      "type": "string",
+      "description": "A handle for a recording produced by KIO2, of the form kio2://trace/<token>. Opaque on purpose: an absolute path would expose KIO2's deployment layout. Stateless — any KIO2 instance sharing the trace directory resolves it — and resolvable only within the configured trace directory.",
+      "examples": ["kio2://trace/L3RtcC9raW8yXzlmMmMueG1s"]
+    }
+  }
+}

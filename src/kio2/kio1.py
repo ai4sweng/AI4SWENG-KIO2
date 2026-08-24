@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -87,6 +88,33 @@ TRACE_BUDGET_SECONDS = float(os.environ.get("KIO2_TRACE_BUDGET", "45"))
 TRACE_ROOT = Path(os.environ.get("KIO2_TRACE_DIR") or tempfile.gettempdir()).resolve()
 
 TRACE_REF_PREFIX = "kio2://trace/"
+
+
+# ── published contract ───────────────────────────────────────────────────────
+
+SCHEMA_DIR = Path(__file__).parent / "schemas"
+
+#: The request/response contract, published so the orchestrator can validate
+#: against it instead of reproducing it by hand. KIO2's own tests check real
+#: replies against `response`, which makes it an enforced contract rather than
+#: documentation. Note that *inbound* messages are deliberately not rejected on
+#: schema grounds: the adapter also honours field-name aliases and inherits
+#: values from `data.upstream`, so KIO2 keeps working while the protocol evolves.
+SCHEMAS = {"request": "kio2.request.schema.json",
+           "response": "kio2.response.schema.json"}
+
+
+def load_schema(name: str) -> dict[str, Any]:
+    """Return a published JSON Schema by name (``request`` or ``response``)."""
+    filename = SCHEMAS.get(name)
+    if filename is None:
+        raise KeyError(f"unknown schema {name!r}; known: {', '.join(sorted(SCHEMAS))}")
+    return json.loads((SCHEMA_DIR / filename).read_text(encoding="utf-8"))
+
+
+def all_schemas() -> dict[str, Any]:
+    """Every published schema, keyed by name."""
+    return {name: load_schema(name) for name in SCHEMAS}
 
 
 # ── the KIO1 envelope ────────────────────────────────────────────────────────
@@ -203,10 +231,21 @@ def _upstream_values(data: dict[str, Any], key: str) -> Any:
 
 
 def _failure_context(data: dict[str, Any]) -> str | None:
-    """Compact free-text description of the failure, for the record."""
+    """Compact free-text description of the failure, for the record.
+
+    Accepts both vocabularies: the structured ``failure`` block and the
+    integration document's ``bug_report``, which may be a string or an object.
+    """
     failure = data.get("failure")
     if not isinstance(failure, dict):
         failure = {}
+
+    report = data.get("bug_report") or _upstream_values(data, "bug_report")
+    if isinstance(report, str):
+        return report.strip() or None
+    if isinstance(report, dict) and not failure:
+        failure = report
+
     parts = [
         failure.get("test_id") or failure.get("test") or _upstream_values(data, "test_id"),
         failure.get("exception_type"),
@@ -231,13 +270,17 @@ def localization_input(message: ExecutionMessage) -> Kio2Input:
     entry = _first(
         target.get("entry_point"), target.get("target_script"),
         data.get("entry_point"), data.get("target_script"),
+        # The KIO1-KIO2 integration document's vocabulary.
+        data.get("entrypoint"),
         _upstream_values(data, "entry_point"), _upstream_values(data, "target_script"),
+        _upstream_values(data, "entrypoint"),
     )
     if not entry:
         raise ValueError(
             "no entry point in the message. KIO2 records a real execution, so it needs a "
-            "runnable script: set data.target.entry_point (and data.repository.path). "
-            "A test id alone is not enough — see docs/INTEGRATION.md §7."
+            "runnable script: set data.target.entry_point (or data.entrypoint) together "
+            "with the repository root (data.repository.path or data.source_location). "
+            "An artifact name or a test id alone is not enough — see docs/INTEGRATION.md §7."
         )
 
     functions = _first(target.get("functions"), data.get("functions")) or []
@@ -246,7 +289,11 @@ def localization_input(message: ExecutionMessage) -> Kio2Input:
 
     return Kio2Input(
         target_script=str(entry),
-        working_directory=str(_first(repository.get("path"), data.get("working_directory")) or ""),
+        working_directory=str(_first(
+            repository.get("path"), data.get("working_directory"),
+            # `source_location` is the integration document's name for the repo root.
+            data.get("source_location"), _upstream_values(data, "source_location"),
+        ) or ""),
         functions=[str(f) for f in functions],
         criterion=data.get("criterion") or None,
         failing_test=_first(_failure_context(data), message.task) or None,
@@ -275,12 +322,13 @@ def _trace_refs(data: dict[str, Any]) -> list[str]:
         if isinstance(value, list) and value:
             return [str(v) for v in value if v]
 
-    for key in ("trace_ref", "trace_path"):
+    for key in ("trace_ref", "trace_path", "execution_trace"):
         value = data.get(key)
         if value:
             return [str(value)]
 
-    inherited = _upstream_values(data, "trace_ref")
+    inherited = _first(_upstream_values(data, "trace_ref"),
+                       _upstream_values(data, "execution_trace"))
     return [str(inherited)] if inherited else []
 
 
@@ -302,6 +350,20 @@ def _relative(path: str, root: str) -> str:
         return Path(path).resolve().relative_to(Path(root).resolve()).as_posix()
     except (ValueError, OSError):
         return Path(path).name
+
+
+def _verdict(result: FaultLocalization) -> str:
+    """"Is something wrong here?", in one field.
+
+    Consumers should not have to infer an answer from the length of a list, nor
+    to know where KIO2 sits in the workflow. A deployment step reads this to
+    decide whether to proceed; a fix step reads it to decide whether to run.
+    """
+    if result.suspect_lines:
+        return "defect"
+    # The clean-run branch of the localizer returns DONE with nothing implicated;
+    # anything else that reaches here was analysed but could not be attributed.
+    return "clean" if result.status == "DONE" else "inconclusive"
 
 
 def _findings(result: FaultLocalization, root: str = "") -> list[dict[str, Any]]:
@@ -336,14 +398,31 @@ def _flat_state(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def localization_output(result: FaultLocalization, root: str = "") -> dict[str, Any]:
-    """`bug_localization` output: where the fault is, with runtime evidence."""
+    """`bug_localization` output: where the fault is, with runtime evidence.
+
+    A clean run reports ``defect_found: false`` with an empty ``findings`` list —
+    a successful answer, not an error. An orchestrator step that asks KIO2 to
+    check code has to be able to hear "nothing wrong here".
+    """
     top = result.suspect_lines[0] if result.suspect_lines else None
-    where = (
-        f"{_relative(top.file, root)}:{top.line} ({top.function})"
-        if top else "an unidentified statement"
-    )
+    if top is None:
+        return {
+            "summary": result.message,
+            "verdict": _verdict(result),
+            "defect_found": False,
+            "findings": [],
+            "crash_state": {},
+            "criterion": result.criterion,
+            "slice_size": 0,
+            "confidence": result.confidence,
+            "trace_ref": make_trace_ref(result.trace_path) if result.trace_path else None,
+            "hitl_required": result.status == "REVIEW_REQUIRED",
+        }
+    where = f"{_relative(top.file, root)}:{top.line} ({top.function})"
     return {
         "summary": f"Located the fault at {where}.",
+        "verdict": _verdict(result),
+        "defect_found": True,
         "findings": _findings(result, root),
         "crash_state": _flat_state(result.crash_state),
         "criterion": result.criterion,
@@ -362,7 +441,10 @@ def _root_cause(result: FaultLocalization, root: str = "") -> str:
     statements that produced those values.
     """
     if not result.suspect_lines:
-        return "No statement could be implicated from the recording."
+        return (
+            "None — the recorded run completed without raising, so there is no "
+            "faulty statement to attribute."
+        )
     top = result.suspect_lines[0]
     state = _flat_state(result.crash_state)
     values = ", ".join(f"{k}={v}" for k, v in list(state.items())[:6]) or "no locals recorded"
@@ -410,6 +492,8 @@ def diagnosis_output(
 
     return {
         "summary": result.message.split("  [")[0],
+        "verdict": _verdict(result),
+        "defect_found": bool(result.suspect_lines),
         "root_cause": _root_cause(result, root),
         "evidence": evidence,
         "compared_runs": compared_runs,

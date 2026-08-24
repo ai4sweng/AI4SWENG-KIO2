@@ -27,7 +27,11 @@ COPY pyproject.toml README.md ./
 COPY src/ ./src/
 RUN pip install --no-cache-dir .
 
-ENV KIO_PORT=8013 KIO_HOST=0.0.0.0
-EXPOSE 8013
+# 8102 is the port KIO1's dispatch registry has for KIO2 (config.json), following
+# its per-KIO scheme (KIO2 -> 8102, KIO10 -> 8110). Override with -e KIO_PORT=...
+ENV KIO_PORT=8102 KIO_HOST=0.0.0.0
+EXPOSE 8102
 
-CMD ["python", "-m", "uvicorn", "kio2.main:app", "--host", "0.0.0.0", "--port", "8013"]
+# Go through the package entrypoint, which reads KIO_PORT / KIO_HOST. Calling
+# uvicorn directly with a hard-coded --port silently ignored -e KIO_PORT.
+CMD ["python", "-m", "kio2.main"]

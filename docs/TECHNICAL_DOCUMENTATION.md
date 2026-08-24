@@ -281,7 +281,7 @@ print(diff.distance, diff.delta)
 
 ```bash
 docker build -t ai4sweng-kio2 .
-docker run -p 8013:8013 ai4sweng-kio2
+docker run -p 8102:8102 ai4sweng-kio2
 # then: curl -XPOST localhost:8013/execute -H 'content-type: application/json' -d '{"payload":{}}'
 ```
 

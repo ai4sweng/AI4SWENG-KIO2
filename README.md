@@ -139,7 +139,7 @@ pytest -q
 
 ```bash
 docker build -t ai4sweng-kio2 .
-docker run -p 8013:8013 ai4sweng-kio2
+docker run -p 8102:8102 ai4sweng-kio2   # the port KIO1's registry has for KIO2
 ```
 
 ### Contract

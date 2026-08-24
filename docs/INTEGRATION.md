@@ -23,14 +23,14 @@ where KIO1 owns the GUI/CLI.
 
 | Mode | How | When |
 |---|---|---|
-| Docker service | `docker build -t ai4sweng-kio2 .` → `docker run -p 8102:8102 -e KIO_PORT=8102 ai4sweng-kio2` | default for the platform (KIO1 registers **8102**) |
+| Docker service | `docker build -t ai4sweng-kio2 .` → `docker run -p 8102:8102 ai4sweng-kio2` | default for the platform; the image listens on **8102**, the port KIO1's dispatch registry has for KIO2 |
 | Standalone process | `python -m kio2.main` | local development |
 | Platform KIO shell | drop `src/kio2/` where the platform expects a shell | `make_app()` auto-detects `kio_base` and upgrades to NATS + HITL + capability announcements |
 | Python library | `from kio2 import localize, replay, compare` | tests, notebooks, another KIO in-process |
 
-Environment: `KIO_PORT` (default `8013`; **use `8102`** to match KIO1's
-registration), `KIO_HOST`, `KIO2_TRACE_BUDGET` (default `45` s),
-`KIO2_TRACE_DIR` (default: the system temp directory).
+Environment: `KIO_PORT` (**8102** in the image, `8013` for a bare local run),
+`KIO_HOST`, `KIO2_TRACE_BUDGET` (default `45` s), `KIO2_TRACE_DIR` (default: the
+system temp directory).
 
 > **Not yet verified:** the Docker image has never been built end to end (no
 > Docker daemon available during development). Build it once before relying on
@@ -88,8 +88,12 @@ Two changes from what is in KIO1's config today:
 `GET /tasks` returns the live list in both vocabularies (`capabilities` for KIO1,
 `supported_tasks` for KIO2's own contract), plus `unsupported_capabilities`.
 
-**Port.** KIO2 defaults to `8013`; KIO1's config expects `8102`. Run KIO2 with
-`KIO_PORT=8102` rather than asking KIO1 to change its registration.
+**Port: 8102.** That is what KIO1's `config.json` registers for KIO2, and it
+follows the orchestrator's per-KIO scheme (KIO2 → 8102, KIO10 → 8110). The image
+listens there. The *host* part depends on the topology: `http://127.0.0.1:8102`
+for a single machine, `http://kio2:8102` where the service name resolves, e.g.
+under Compose. KIO2's bare local default remains `8013`; `KIO_PORT` selects any
+of them.
 
 ### 3.2 What to send
 
@@ -117,13 +121,13 @@ Two changes from what is in KIO1's config today:
 
 | `data` field | Required | Meaning |
 |---|---|---|
-| `target.entry_point` | **yes** (for localization/diagnosis) | runnable script; relative to `repository.path` |
-| `repository.path` | recommended | repo root — also the scope for target discovery |
+| `target.entry_point` | **yes** (for localization/diagnosis) | runnable script; relative to `repository.path`. Also accepted as `data.entrypoint` |
+| `repository.path` | recommended | repo root — also the scope for target discovery. Also accepted as `data.source_location` |
 | `target.functions` | no | leave empty and KIO2 discovers them |
-| `failure.*` | no | recorded as context; `test_id`, `exception_type`, `message` |
+| `failure.*` | no | recorded as context; `test_id`, `exception_type`, `message`. Also accepted as `data.bug_report` (string or object) |
 | `criterion` | no | `[FILE:]LINE[:VAR]` to analyse a value instead of the crash |
 | `reference.trace_ref` | no | a passing run to diagnose against (see `diagnosis`) |
-| `trace_ref` / `trace_refs` | for `replay` / `trace_alignment` | which recordings to work on |
+| `trace_ref` / `trace_refs` | for `replay` / `trace_alignment` | which recordings to work on. Also accepted as `data.execution_trace` |
 | `seq`, `at_line`, `at_exception`, `step`, `step_action`, `back`, `window` | no | cursor controls |
 | `upstream` | filled by KIO1 | dependency outputs; KIO2 reads `entry_point`, `target_script` and `trace_ref` out of them |
 
@@ -147,6 +151,8 @@ stub returns:
 ```json
 {
   "summary": "Located the fault at shop/pricing.py:11 (discounted).",
+  "verdict": "defect",
+  "defect_found": true,
   "findings": [
     { "file": "shop/pricing.py", "function": "discounted", "line": 11,
       "confidence": 0.85, "score": 1.0, "dependency": "criterion",
@@ -172,6 +178,22 @@ for consumers that want the evidence itself.
 `file` paths are **relative to `repository.path`**, POSIX-separated. Absolute
 paths from inside KIO2's container are meaningless to KIO1 and would leak our
 filesystem layout.
+
+**One field to act on: `verdict`.** Every localization and diagnosis reply
+carries `verdict` — `"defect"` (statements were implicated), `"clean"` (the
+target ran to completion, nothing to localise) or `"inconclusive"` (analysed, but
+nothing could be attributed — treat as needing review). A consumer should read
+that rather than inferring an answer from the length of `findings`, and it means
+**no consumer needs to know where KIO2 sits in the workflow**: a deployment step
+reads it to decide whether to proceed, a fix step reads it to decide whether to
+run, the orchestrator surfaces it.
+
+**A clean run is a success, not an error.** When the target runs to completion
+KIO2 answers `status: "ok"` with `defect_found: false` and an empty `findings`
+list. An orchestrator step that asks KIO2 to check code has to be able to hear
+*"nothing wrong here"*; reporting that as an error would fail every workflow over
+healthy code. `diagnosis` behaves the same way, with `root_cause` saying that
+there is no faulty statement to attribute.
 
 **`diagnosis`** — the causal story plus the evidence, and `slice_context` for KIO7:
 
@@ -528,3 +550,45 @@ With OpenTelemetry absent, every emission is a no-op.
 Still open: emitting the programme-wide `kio.slicing.success_rate`, and
 `publish_progress` calls so the platform dashboard shows live progress. See
 `src/kio2/OTEL_HANDOFF.md` and `docs/TECHNICAL_DOCUMENTATION.md` §7b.
+
+---
+
+## 11. The published schema
+
+The request and response contracts ship as JSON Schema (draft 2020-12) rather
+than being described only in prose, so the orchestrator can validate against them
+instead of reproducing the shapes by hand:
+
+| Where | What |
+|---|---|
+| `GET /schema` | both schemas, keyed `request` / `response` |
+| `GET /schema?name=response` | one of them |
+| `src/kio2/schemas/*.json` | the same files, in the repository |
+| `GET /tasks` → `schema_url` | how a caller discovers the above |
+
+These are an **enforced** contract, not documentation: the test suite validates a
+real reply from every capability — including both error paths — against
+`kio2.response.schema.json`, so the schema cannot drift from the implementation
+without a test failing.
+
+The request schema is published for the caller's benefit and is **not** applied
+to inbound messages. KIO2's runtime acceptance is deliberately more lenient: it
+honours the field-name aliases below and inherits missing values from
+`data.upstream`, so a protocol change on KIO1's side does not take KIO2 down. A
+message that fails the request schema may therefore still be served.
+
+---
+
+## 12. Field-name aliases
+
+The *KIO1 – KIO2 Integration Strategy and Communication Protocol* document uses
+its own names for the `data` payload. Both vocabularies are accepted, so the
+wording of that document does not have to be settled before wiring can start:
+
+| Integration document | KIO2 canonical | Note |
+|---|---|---|
+| `source_location` | `repository.path` | repo root |
+| `entrypoint` | `target.entry_point` | the runnable script — **the document has no field for this yet**; see §7 |
+| `execution_trace` | `trace_ref` | a recording produced by an earlier KIO2 step |
+| `bug_report` | `failure` | accepted as a string or an object |
+| `source_artifact` | — | recorded for traceability; KIO2 needs a path, not a name |
