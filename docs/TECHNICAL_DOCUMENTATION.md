@@ -35,6 +35,11 @@ The trace/slicing/replay engine underneath is **FocusTracer**, an independent
 tool consumed here as a **library dependency** (not vendored). KIO2 is the
 AI4SWENG service that wraps FocusTracer behind the KIO contract.
 
+Every trace FocusTracer records and KIO2 reads back is an instance of one
+schema, documented independently of this service in
+[`docs/trace-schema/`](trace-schema/): format reference, version history, and
+how to validate a trace file against it.
+
 ---
 
 ## 2. Architecture
@@ -55,6 +60,11 @@ AI4SWENG service that wraps FocusTracer behind the KIO contract.
                               observability.py                          → hand off to KIO7
                               (OTEL spans+metrics)
 ```
+
+<!--
+  Optional: replace or supplement the ASCII diagram above with a rendered
+  architecture diagram, for example docs/architecture/kio2-architecture.png.
+-->
 
 `runner.py` is the only component that executes anything. Everything to its
 right reads the recorded trace: `localizer.py` slices it (FR-KIO2-05),
