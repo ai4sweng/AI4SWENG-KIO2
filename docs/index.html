@@ -1,0 +1,955 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>KIO2 Schema Explorer</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --bg: #f6f7fb;
+    --surface: #ffffff;
+    --surface-2: #f0f1f7;
+    --border: #e2e4ee;
+    --text: #1b1e2b;
+    --text-dim: #5b5f76;
+    --text-faint: #8a8ea3;
+    --accent: #4f46e5;
+    --accent-soft: #eef0ff;
+    --code-bg: #1e1f2b;
+    --code-text: #e6e6f0;
+    --ok: #16a34a;
+    --ok-soft: #e7f8ee;
+    --err: #dc2626;
+    --err-soft: #fdecec;
+    --warn: #b45309;
+    --warn-soft: #fdf3e3;
+
+    --c-loc: #4f46e5;      --c-loc-soft: #eef0ff;
+    --c-diag: #9333ea;     --c-diag-soft: #f5ecfd;
+    --c-replay: #0d9488;   --c-replay-soft: #e6f7f5;
+    --c-align: #b45309;    --c-align-soft: #fdf3e3;
+
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg: #101119;
+      --surface: #171826;
+      --surface-2: #1e2033;
+      --border: #2b2d42;
+      --text: #eceefb;
+      --text-dim: #b0b3c9;
+      --text-faint: #7d8099;
+      --accent: #8b85ff;
+      --accent-soft: #232253;
+      --code-bg: #0c0d15;
+      --code-text: #e6e6f0;
+      --ok: #4ade80;
+      --ok-soft: #10301f;
+      --err: #f87171;
+      --err-soft: #3a1616;
+      --warn: #fbbf24;
+      --warn-soft: #3a2a0d;
+
+      --c-loc: #8b85ff;    --c-loc-soft: #232253;
+      --c-diag: #d19bfa;   --c-diag-soft: #2b1f3e;
+      --c-replay: #5eead4; --c-replay-soft: #123330;
+      --c-align: #fbbf24;  --c-align-soft: #3a2a0d;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg: #101119;
+    --surface: #171826;
+    --surface-2: #1e2033;
+    --border: #2b2d42;
+    --text: #eceefb;
+    --text-dim: #b0b3c9;
+    --text-faint: #7d8099;
+    --accent: #8b85ff;
+    --accent-soft: #232253;
+    --code-bg: #0c0d15;
+    --code-text: #e6e6f0;
+    --ok: #4ade80;
+    --ok-soft: #10301f;
+    --err: #f87171;
+    --err-soft: #3a1616;
+    --warn: #fbbf24;
+    --warn-soft: #3a2a0d;
+    --c-loc: #8b85ff;    --c-loc-soft: #232253;
+    --c-diag: #d19bfa;   --c-diag-soft: #2b1f3e;
+    --c-replay: #5eead4; --c-replay-soft: #123330;
+    --c-align: #fbbf24;  --c-align-soft: #3a2a0d;
+  }
+
+  *{ box-sizing: border-box; }
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  img{ max-width:100%; }
+  [hidden]{ display:none !important; }
+  code, pre, .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+
+  a{ color: var(--accent); text-decoration: none; }
+  a:hover{ text-decoration: underline; }
+
+  .skip-link{ position:absolute; left:-999px; top:auto; }
+  .skip-link:focus{ left:16px; top:16px; z-index:999; background:var(--surface); padding:8px 12px; border-radius:8px; }
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 50;
+    display:flex; align-items:center; gap:12px;
+    padding: 12px clamp(16px, 4vw, 32px);
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar .logo{
+    width:34px; height:34px; border-radius:9px;
+    background: linear-gradient(135deg, var(--accent), #22d3ee);
+    display:flex; align-items:center; justify-content:center;
+    color:white; font-weight:800; font-size:14px; flex:none;
+    box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .topbar .title{ font-weight:700; font-size:15px; }
+  .topbar .title small{ display:block; font-weight:500; color:var(--text-faint); font-size:11px; }
+  .topbar nav{ margin-left:auto; display:flex; gap:2px; overflow-x:auto; scrollbar-width:none; }
+  .topbar nav::-webkit-scrollbar{ display:none; }
+  .topbar nav a{
+    color: var(--text-dim); font-size:13px; font-weight:600; white-space:nowrap;
+    padding:8px 10px; border-radius:8px;
+  }
+  .topbar nav a:hover{ background: var(--surface-2); text-decoration:none; color:var(--text); }
+  .theme-btn{
+    flex:none; border:1px solid var(--border); background:var(--surface-2); color:var(--text);
+    border-radius:8px; width:34px; height:34px; cursor:pointer; font-size:15px;
+  }
+
+  main{ max-width: 1080px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 32px) 80px; }
+
+  /* ---------- Hero ---------- */
+  .hero{ padding: 40px 0 24px; }
+  .hero h1{ font-size: clamp(26px, 4vw, 38px); margin: 0 0 10px; letter-spacing:-0.02em; }
+  .hero p.lead{ color: var(--text-dim); max-width: 66ch; font-size:16px; margin: 0 0 18px; }
+  .badges{ display:flex; flex-wrap:wrap; gap:8px; }
+  .badge{
+    display:inline-flex; align-items:center; gap:6px;
+    background: var(--surface-2); border:1px solid var(--border);
+    color: var(--text-dim); font-size:12.5px; font-weight:600;
+    padding: 5px 10px; border-radius:999px;
+  }
+  .badge.dot::before{ content:""; width:7px; height:7px; border-radius:50%; background: var(--ok); flex:none; }
+
+  section{ scroll-margin-top: 76px; padding: 34px 0; border-top: 1px solid var(--border); }
+  section:first-of-type{ border-top:none; }
+  .section-head{ margin-bottom: 18px; }
+  .eyebrow{ text-transform:uppercase; letter-spacing:.08em; font-size:11.5px; font-weight:700; color:var(--accent); }
+  h2{ font-size: 22px; margin: 4px 0 6px; letter-spacing:-0.01em; }
+  h3{ font-size: 16.5px; margin: 0 0 4px; }
+  .muted{ color: var(--text-dim); }
+  .section-sub{ color:var(--text-dim); max-width: 74ch; margin: 0; }
+
+  /* ---------- Flow diagram ---------- */
+  .flow{
+    display:flex; align-items:stretch; gap:0; margin: 22px 0 6px; overflow-x:auto;
+  }
+  .flow-node{
+    flex: 1 1 150px; min-width:150px; background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:14px; text-align:center;
+  }
+  .flow-node .k{ font-weight:800; font-size:14px; }
+  .flow-node .d{ color:var(--text-faint); font-size:12px; margin-top:3px; }
+  .flow-arrow{ flex:0 0 64px; display:flex; align-items:center; justify-content:center; flex-direction:column; color:var(--text-faint); font-size:11px; gap:2px; }
+  .flow-arrow .line{ width:100%; height:2px; background: var(--border); position:relative; }
+  .flow-arrow .line::after{ content:"›"; position:absolute; right:-2px; top:-11px; font-size:18px; color: var(--text-faint); }
+
+  .callout{
+    display:flex; gap:10px; padding:12px 14px; border-radius:10px; border:1px solid var(--border);
+    background: var(--surface); margin: 12px 0;
+  }
+  .callout .ic{ flex:none; font-size:16px; }
+  .callout.info{ border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); background: var(--accent-soft); }
+  .callout.ok{ border-color: color-mix(in srgb, var(--ok) 35%, var(--border)); background: var(--ok-soft); }
+  .callout.warn{ border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); background: var(--warn-soft); }
+  .callout p{ margin:0; font-size:13.5px; color:var(--text); }
+  .callout code{ background: color-mix(in srgb, var(--text) 8%, transparent); padding:1px 5px; border-radius:5px; font-size:12.5px; }
+
+  /* ---------- Cards / fields ---------- */
+  .card{ background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px; margin-bottom:14px; }
+  .card-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+
+  .field-table{ width:100%; border-collapse:collapse; margin-top:6px; }
+  .field-table th{
+    text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--text-faint); font-weight:700; padding:6px 10px; border-bottom:1px solid var(--border);
+  }
+  .field-table td{ padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:top; font-size:13.5px; }
+  .field-table tr:last-child td{ border-bottom:none; }
+  .field-table .fname{ font-weight:700; white-space:nowrap; }
+  .field-table .fdesc{ color:var(--text-dim); }
+  .field-table .fdesc .alias{ display:inline-block; margin-top:4px; font-size:12px; color:var(--text-faint); }
+  .field-table .fdesc .alias code{ background:var(--surface-2); padding:1px 5px; border-radius:5px; }
+
+  .tag{ display:inline-block; font-size:11px; font-weight:700; padding:2px 7px; border-radius:6px; white-space:nowrap; }
+  .tag.type{ background: var(--surface-2); color:var(--text-dim); border:1px solid var(--border); }
+  .tag.req{ background: var(--err-soft); color: var(--err); }
+  .tag.opt{ background: var(--surface-2); color: var(--text-faint); }
+  .tag.enum-v{ background: var(--accent-soft); color: var(--accent); margin:1px 3px 1px 0; font-weight:600; }
+
+  .table-wrap{ overflow-x:auto; }
+
+  details.group{ border:1px solid var(--border); border-radius:12px; margin: 10px 0; overflow:hidden; background:var(--surface-2); }
+  details.group summary{
+    cursor:pointer; list-style:none; padding:12px 14px; font-weight:700; font-size:14px;
+    display:flex; align-items:center; gap:8px; user-select:none;
+  }
+  details.group summary::-webkit-details-marker{ display:none; }
+  details.group summary::before{ content:"▸"; color:var(--text-faint); transition: transform .15s; font-size:12px; }
+  details.group[open] summary::before{ transform: rotate(90deg); }
+  details.group summary .path{ color:var(--text-faint); font-weight:500; font-size:12px; }
+  details.group .body{ padding: 0 14px 14px; }
+
+  /* ---------- Capability chips / cards ---------- */
+  .cap-grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(230px,1fr)); gap:14px; margin-top:14px; }
+  .cap-card{ border-radius:14px; padding:16px; border:1px solid var(--border); background:var(--surface); position:relative; overflow:hidden; }
+  .cap-card::before{ content:""; position:absolute; inset:0 0 auto 0; height:4px; background: var(--dot); }
+  .cap-card .cname{ font-weight:800; font-size:14.5px; font-family: ui-monospace, monospace; }
+  .cap-card .cdesc{ color:var(--text-dim); font-size:13px; margin: 6px 0 10px; }
+  .cap-card .meta{ font-size:12px; color:var(--text-faint); display:flex; flex-direction:column; gap:3px; }
+  .cap-card .meta b{ color:var(--text-dim); font-weight:600; }
+  .swatch{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; }
+
+  /* ---------- Tabs for output shapes ---------- */
+  .tabs{ display:flex; gap:6px; flex-wrap:wrap; margin: 16px 0 0; border-bottom:1px solid var(--border); }
+  .tab-btn{
+    border:none; background:transparent; cursor:pointer; padding:9px 14px; font-size:13.5px; font-weight:700;
+    color: var(--text-faint); border-bottom:2px solid transparent; margin-bottom:-1px; font-family:inherit;
+  }
+  .tab-btn:hover{ color:var(--text); }
+  .tab-btn.active{ color: var(--tabcolor, var(--accent)); border-bottom-color: var(--tabcolor, var(--accent)); }
+  .tab-panel{ padding-top:16px; }
+  .tab-panel[hidden]{ display:none; }
+
+  /* ---------- Code blocks ---------- */
+  pre.json{
+    background: var(--code-bg); color: var(--code-text);
+    padding:14px 16px; border-radius:10px; overflow-x:auto; font-size:12.5px; line-height:1.6;
+    border: 1px solid color-mix(in srgb, var(--code-bg) 60%, white 8%);
+  }
+  pre.json .k{ color:#7dd3fc; }
+  pre.json .s{ color:#a5d6a7; }
+  pre.json .n{ color:#f0b060; }
+  pre.json .b{ color:#f78fb3; }
+  pre.json .p{ color:#8a8ea3; }
+  .code-label{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-faint); font-weight:700; margin: 14px 0 6px; }
+
+  /* ---------- Alias / roadmap tables ---------- */
+  table.plain{ width:100%; border-collapse:collapse; }
+  table.plain th{ text-align:left; font-size:11.5px; text-transform:uppercase; color:var(--text-faint); padding:8px 10px; border-bottom:1px solid var(--border); }
+  table.plain td{ padding:10px; border-bottom:1px solid var(--border); font-size:13.5px; }
+  table.plain code{ background:var(--surface-2); padding:1px 5px; border-radius:5px; font-size:12.5px; }
+
+  .status-pill{ font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; white-space:nowrap; }
+  .status-pill.proposed{ background: var(--warn-soft); color:var(--warn); }
+
+  .verdict-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+  .verdict-chip{ flex:1 1 180px; border:1px solid var(--border); border-radius:10px; padding:10px 12px; background:var(--surface); }
+  .verdict-chip b{ display:block; font-size:13px; margin-bottom:3px; }
+  .verdict-chip.defect b{ color: var(--err); }
+  .verdict-chip.clean b{ color: var(--ok); }
+  .verdict-chip.inconclusive b{ color: var(--warn); }
+  .verdict-chip span{ font-size:12.5px; color:var(--text-dim); }
+
+  footer{ padding: 30px 0 60px; color:var(--text-faint); font-size:12.5px; border-top:1px solid var(--border); }
+  footer a{ color:var(--text-dim); }
+  footer ul{ padding-left:18px; margin:8px 0; }
+
+  @media (max-width: 720px){
+    .topbar nav{ display:none; }
+    .flow{ flex-direction:column; }
+    .flow-arrow{ flex-direction:row; width:100%; height:28px; }
+    .flow-arrow .line{ height:auto; width:2px; }
+    .flow-arrow .line::after{ content:"⌄"; top:auto; bottom:-13px; right:-8px; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#overview">Skip to content</a>
+
+<div class="topbar">
+  <div class="logo">KIO2</div>
+  <div class="title">KIO2 Schema Explorer<small>Request &amp; response contract · JSON Schema draft 2020-12</small></div>
+  <nav aria-label="Sections">
+    <a href="#overview">Overview</a>
+    <a href="#request">Request</a>
+    <a href="#response">Response</a>
+    <a href="#capabilities">Capabilities</a>
+    <a href="#aliases">Aliases</a>
+    <a href="#roadmap">Roadmap</a>
+  </nav>
+  <button class="theme-btn" id="themeBtn" title="Toggle theme" aria-label="Toggle color theme">◐</button>
+</div>
+
+<main>
+
+  <section id="overview">
+    <div class="hero">
+      <div class="eyebrow">KIO1 – KIO2 Integration Protocol · v0.3</div>
+      <h1>What goes in, and what comes back out of KIO2</h1>
+      <p class="lead">
+        KIO2 turns a <strong>failing execution</strong> into <strong>ranked suspect statements</strong> with runtime
+        evidence, and lets a caller navigate or compare the recorded executions afterwards. This page renders the two
+        contracts KIO2 ships as machine-checked JSON Schemas —
+        <code>kio2.request.schema.json</code> and <code>kio2.response.schema.json</code> — as a readable reference,
+        instead of asking an integrator to parse the raw schema files.
+      </p>
+      <div class="badges">
+        <span class="badge dot">Always HTTP 200</span>
+        <span class="badge">Endpoint <code class="mono">POST /execute</code></span>
+        <span class="badge">Port <code class="mono">8102</code></span>
+        <span class="badge">4 capabilities</span>
+        <span class="badge">KIO2 never calls another KIO</span>
+      </div>
+    </div>
+
+    <div class="flow">
+      <div class="flow-node"><div class="k">KIO1 Orchestrator</div><div class="d">builds the execution message</div></div>
+      <div class="flow-arrow"><div class="line"></div><span>POST /execute</span></div>
+      <div class="flow-node"><div class="k">KIO2</div><div class="d">runs the target, records a trace, slices it</div></div>
+      <div class="flow-arrow"><div class="line"></div><span>HTTP 200, always</span></div>
+      <div class="flow-node"><div class="k">KIO1 Orchestrator</div><div class="d">reads <code>status</code> &amp; <code>verdict</code>, routes to the next step (e.g. KIO7)</div></div>
+    </div>
+
+    <div class="callout info">
+      <span class="ic">ℹ️</span>
+      <p>All input arrives through this one request; results reach other KIOs only through the orchestrator. Asking
+        KIO2 for <code>fix_recommendation</code> is explicitly refused — per D2.6 UC-UC1-03 that step belongs to
+        <strong>KIO7</strong>, and KIO2 supplies the evidence for it as <code>diagnosis.slice_context</code>.</p>
+    </div>
+    <div class="callout ok">
+      <span class="ic">✅</span>
+      <p>A clean run is a <strong>success</strong>, not an error. When the target runs to completion, KIO2 answers
+        <code>status: "ok"</code> with <code>defect_found: false</code> and an empty <code>findings</code> list —
+        an orchestrator step that asks "is this code broken?" has to be able to hear "no".</p>
+    </div>
+
+    <h3 style="margin-top:22px;">The one field to act on: <code>verdict</code></h3>
+    <p class="muted" style="margin:4px 0 0; max-width:70ch;">Every <code>bug_localization</code> and <code>diagnosis</code> reply carries it, so no consumer needs to know where KIO2 sits in the workflow.</p>
+    <div class="verdict-row">
+      <div class="verdict-chip defect"><b>defect</b><span>Statements were implicated in the failure.</span></div>
+      <div class="verdict-chip clean"><b>clean</b><span>The target ran to completion — nothing to localise.</span></div>
+      <div class="verdict-chip inconclusive"><b>inconclusive</b><span>Analysed, but nothing could be attributed. Treat as needing human review.</span></div>
+    </div>
+  </section>
+
+  <!-- ===================== REQUEST ===================== -->
+  <section id="request">
+    <div class="section-head">
+      <div class="eyebrow">kio2.request.schema.json</div>
+      <h2>The execution message</h2>
+      <p class="section-sub">
+        Dispatched to KIO2 by the KIO1 orchestrator. This schema states what a well-formed message looks like;
+        KIO2's runtime acceptance is deliberately more lenient — it also honours field-name aliases and inherits
+        missing values from <code>data.upstream</code> — so a message that fails this schema may still be served.
+        The schema is published for the caller's benefit, not enforced on inbound traffic.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Top-level fields</h3><span class="tag req">capability is the only required field</span></div>
+      <div class="table-wrap">
+      <table class="field-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td class="fname">workflow_id</td><td><span class="tag type">string</span></td><td class="fdesc">Identifies the workflow. Echoed back unchanged.</td></tr>
+          <tr><td class="fname">step_id</td><td><span class="tag type">string</span></td><td class="fdesc">Identifies the step within the workflow. Echoed back unchanged — this is how the orchestrator matches a reply to the step that produced it.</td></tr>
+          <tr><td class="fname">agent_id</td><td><span class="tag type">const</span></td><td class="fdesc">The target agent. Always <code>"KIO2"</code>.</td></tr>
+          <tr>
+            <td class="fname">capability <span class="tag req">required</span></td>
+            <td><span class="tag type">enum</span></td>
+            <td class="fdesc">
+              Which capability is requested. One not declared by KIO2 is answered with <code>status: "error"</code> —
+              notably <code>fix_recommendation</code> is <strong>not</strong> a KIO2 capability.<br/>
+              <span class="enum-v" style="background:var(--c-loc-soft); color:var(--c-loc);">bug_localization</span>
+              <span class="enum-v" style="background:var(--c-diag-soft); color:var(--c-diag);">diagnosis</span>
+              <span class="enum-v" style="background:var(--c-replay-soft); color:var(--c-replay);">replay</span>
+              <span class="enum-v" style="background:var(--c-align-soft); color:var(--c-align);">trace_alignment</span>
+            </td>
+          </tr>
+          <tr><td class="fname">endpoint</td><td><span class="tag type">string</span></td><td class="fdesc">KIO2's own address as the orchestrator knows it. Informational.</td></tr>
+          <tr><td class="fname">task</td><td><span class="tag type">string</span></td><td class="fdesc">Natural-language instruction. Recorded as failure context when no structured context is supplied.</td></tr>
+          <tr><td class="fname">depends_on</td><td><span class="tag type">string[]</span></td><td class="fdesc">Step ids whose output this step consumes. The orchestrator delivers them under <code>data.upstream</code>.</td></tr>
+          <tr><td class="fname">data</td><td><span class="tag type">object</span></td><td class="fdesc">Structured input — the protocol's extension point. KIO2 records a real execution, so localization and diagnosis need a runnable entry point: an artifact name and a repository location alone do not state what to run.</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+
+    <h3 style="margin-top:22px;">Inside <code>data</code></h3>
+    <p class="muted" style="max-width:70ch;">Grouped by purpose. Fields marked <span class="tag opt" style="vertical-align:middle;">alias</span> are the integration document's own vocabulary — both spellings are accepted.</p>
+
+    <details class="group" open>
+      <summary>Repository &amp; target <span class="path">data.repository, data.target</span></summary>
+      <div class="body">
+        <table class="field-table">
+          <tbody>
+            <tr><td class="fname">repository.path</td><td><span class="tag type">string</span></td>
+              <td class="fdesc">Repository root, reachable inside the KIO2 container. Used as the working directory and as the scope for trace-target discovery.
+                <div class="alias">alias: <code>data.source_location</code></div></td></tr>
+            <tr><td class="fname">repository.revision</td><td><span class="tag type">string</span></td><td class="fdesc">Commit or revision, for traceability.</td></tr>
+            <tr><td class="fname">target.entry_point</td><td><span class="tag type">string</span></td>
+              <td class="fdesc">Runnable script, relative to the repository root.
+                <div class="alias">alias: <code>data.entrypoint</code> — the integration document has no field for this yet</div></td></tr>
+            <tr><td class="fname">target.functions</td><td><span class="tag type">string[]</span></td><td class="fdesc">Functions to instrument. Leave empty (the expected mode) — KIO2 discovers them from the repository, since a caller knows which run failed, not which functions to instrument.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="group">
+      <summary>Failure context <span class="path">data.failure</span></summary>
+      <div class="body">
+        <table class="field-table">
+          <tbody>
+            <tr><td class="fname">failure.test_id</td><td><span class="tag type">string</span></td><td class="fdesc">Failing test identifier, e.g. a pytest node id.</td></tr>
+            <tr><td class="fname">failure.exception_type</td><td><span class="tag type">string</span></td><td class="fdesc">The raised exception's class name.</td></tr>
+            <tr><td class="fname">failure.message</td><td><span class="tag type">string</span></td><td class="fdesc">The exception message.</td></tr>
+            <tr><td class="fname">failure.traceback</td><td><span class="tag type">string</span></td><td class="fdesc">Raw traceback text, if available.</td></tr>
+          </tbody>
+        </table>
+        <div class="alias" style="margin-top:8px;">alias: <code>data.bug_report</code> (string or object) — typically originates from the test-automation step.</div>
+      </div>
+    </details>
+
+    <details class="group">
+      <summary>Analysis target &amp; comparison <span class="path">data.criterion, data.reference</span></summary>
+      <div class="body">
+        <table class="field-table">
+          <tbody>
+            <tr><td class="fname">criterion</td><td><span class="tag type">string | null</span></td><td class="fdesc"><code>[FILE:]LINE[:VAR]</code> to analyse a specific value instead of the crash. Null or absent means analyse at the failure.</td></tr>
+            <tr><td class="fname">reference.trace_ref</td><td><span class="tag type">traceRef</span></td><td class="fdesc">A passing run of the same program. When given, <code>diagnosis</code> reports how the failing run differed from it.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="group">
+      <summary>Trace references <span class="path">data.trace_ref, data.trace_refs, data.execution_trace</span></summary>
+      <div class="body">
+        <table class="field-table">
+          <tbody>
+            <tr><td class="fname">trace_ref</td><td><span class="tag type">traceRef</span></td><td class="fdesc">One recording to work on (used by <code>replay</code>).</td></tr>
+            <tr><td class="fname">trace_refs</td><td><span class="tag type">traceRef[]</span></td><td class="fdesc">Recordings to work on. Two for a side-by-side comparison, three or more to curate them as a set (used by <code>trace_alignment</code>).</td></tr>
+            <tr><td class="fname">execution_trace</td><td><span class="tag type">traceRef | null</span></td>
+              <td class="fdesc">The integration document's name for a trace reference. Traces are produced by KIO2 itself and returned in the output of a localization or diagnosis step.
+                <div class="alias">canonical: <code>trace_ref</code></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="group">
+      <summary>Traceability-only aliases <span class="path">data.source_location, data.entrypoint, data.source_artifact, data.bug_report</span></summary>
+      <div class="body">
+        <table class="field-table">
+          <tbody>
+            <tr><td class="fname">source_location</td><td><span class="tag type">string</span></td><td class="fdesc">The integration document's name for the repository root → <code>repository.path</code>.</td></tr>
+            <tr><td class="fname">entrypoint</td><td><span class="tag type">string</span></td><td class="fdesc">The integration document's name for the runnable entry point → <code>target.entry_point</code>.</td></tr>
+            <tr><td class="fname">source_artifact</td><td><span class="tag type">string</span></td><td class="fdesc">Recorded for traceability only. KIO2 needs a path, not an artifact name — this field has no canonical counterpart.</td></tr>
+            <tr><td class="fname">bug_report</td><td><span class="tag type">string | object | null</span></td><td class="fdesc">The integration document's name for the failure context → <code>failure</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="group">
+      <summary>Cursor controls <span class="path">data.seq, at_line, step, …</span></summary>
+      <div class="body">
+        <table class="field-table">
+          <tbody>
+            <tr><td class="fname">seq</td><td><span class="tag type">integer ≥ 0</span></td><td class="fdesc">Cursor position on the timeline. Stateless navigation: send back the cursor a previous reply returned.</td></tr>
+            <tr><td class="fname">at_event</td><td><span class="tag type">integer</span></td><td class="fdesc">Start at this line-event id.</td></tr>
+            <tr><td class="fname">at_line</td><td><span class="tag type">integer</span></td><td class="fdesc">Start at this source line.</td></tr>
+            <tr><td class="fname">function</td><td><span class="tag type">string</span></td><td class="fdesc">Disambiguates <code>at_line</code> when the same line number appears in more than one function.</td></tr>
+            <tr><td class="fname">at_exception</td><td><span class="tag type">boolean</span></td><td class="fdesc">Start at the recorded failure.</td></tr>
+            <tr><td class="fname">step</td><td><span class="tag type">integer</span></td><td class="fdesc">Signed line steps from the start point.</td></tr>
+            <tr><td class="fname">step_action</td><td><span class="tag type">enum | null</span></td><td class="fdesc">Debugger step, as in a conventional debugger: <code>into</code> · <code>over</code> · <code>out</code>.</td></tr>
+            <tr><td class="fname">back</td><td><span class="tag type">boolean</span></td><td class="fdesc">Apply <code>step_action</code> in reverse.</td></tr>
+            <tr><td class="fname">window</td><td><span class="tag type">integer ≥ 0</span></td><td class="fdesc">Neighbouring line-events to return around the cursor.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details class="group">
+      <summary>Upstream data <span class="path">data.upstream</span></summary>
+      <div class="body">
+        <p class="muted">Outputs of the steps this one depends on, keyed by step id. Filled by the orchestrator. KIO2
+          reads the entry point, the repository root and any trace reference out of it when they are not given
+          directly, so a declared dependency in <code>depends_on</code> needs no further wiring — a chain works with
+          no extra plumbing.</p>
+      </div>
+    </details>
+
+    <div class="card" style="margin-top:18px;">
+      <div class="card-head"><h3>What each capability additionally requires</h3></div>
+      <p class="muted" style="margin-top:0;">Enforced via the schema's conditional (<code>allOf</code>/<code>if</code>/<code>then</code>) rules — at least one of the listed shapes must be present in <code>data</code>.</p>
+      <div class="table-wrap">
+      <table class="field-table">
+        <thead><tr><th>Capability</th><th>Needs one of</th></tr></thead>
+        <tbody>
+          <tr><td class="fname" style="color:var(--c-loc);">bug_localization / diagnosis</td>
+              <td class="fdesc"><code>target.entry_point</code> &nbsp;or&nbsp; <code>data.entrypoint</code> &nbsp;or&nbsp; <code>data.upstream</code></td></tr>
+          <tr><td class="fname" style="color:var(--c-replay);">replay</td>
+              <td class="fdesc"><code>trace_ref</code> &nbsp;or&nbsp; <code>trace_refs</code> &nbsp;or&nbsp; <code>execution_trace</code> &nbsp;or&nbsp; <code>upstream</code></td></tr>
+          <tr><td class="fname" style="color:var(--c-align);">trace_alignment</td>
+              <td class="fdesc"><code>trace_refs</code> (min. 2 items) &nbsp;or&nbsp; <code>upstream</code></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+
+    <div class="code-label">Example — bug_localization request</div>
+    <pre class="json" data-json='{
+  "workflow_id": "wf-bug-pay01",
+  "step_id": "s2",
+  "agent_id": "KIO2",
+  "capability": "bug_localization",
+  "endpoint": "http://127.0.0.1:8102",
+  "task": "Locate the fault behind test_bronze_tier",
+  "data": {
+    "repository": { "path": "/work/repo", "revision": "a1b2c3d" },
+    "target": { "entry_point": "reproduce.py", "functions": [] },
+    "failure": {
+      "test_id": "tests/test_order.py::test_bronze_tier",
+      "exception_type": "KeyError",
+      "message": "&#39;bronze&#39;"
+    }
+  }
+}'></pre>
+  </section>
+
+  <!-- ===================== RESPONSE ===================== -->
+  <section id="response">
+    <div class="section-head">
+      <div class="eyebrow">kio2.response.schema.json</div>
+      <h2>The reply envelope</h2>
+      <p class="section-sub">
+        What KIO2 returns for an execution message. Always delivered with <strong>HTTP 200</strong> — a non-2xx
+        response means the service is unavailable, a different condition from the task having failed. This is an
+        <strong>enforced</strong> contract: KIO2's own test suite validates real replies from every capability,
+        including both error paths, against this schema.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Top-level fields</h3><span class="tag req">all 5 fields required</span></div>
+      <div class="table-wrap">
+      <table class="field-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td class="fname">workflow_id</td><td><span class="tag type">string</span></td><td class="fdesc">Echoed from the request.</td></tr>
+          <tr><td class="fname">step_id</td><td><span class="tag type">string</span></td><td class="fdesc">Echoed from the request.</td></tr>
+          <tr><td class="fname">agent_id</td><td><span class="tag type">const</span></td><td class="fdesc">Always <code>"KIO2"</code>.</td></tr>
+          <tr><td class="fname">status</td><td><span class="tag type">enum</span></td>
+            <td class="fdesc">Always set explicitly — an absent status is read by the orchestrator as success, which would record a failed step as successful with no result.
+              <div style="margin-top:6px;"><span class="enum-v" style="background:var(--ok-soft); color:var(--ok);">ok</span><span class="enum-v" style="background:var(--err-soft); color:var(--err);">error</span></div>
+            </td></tr>
+          <tr><td class="fname">output</td><td><span class="tag type">oneOf | null</span></td>
+            <td class="fdesc">Result of the requested capability, or <code>null</code> when <code>status</code> is <code>"error"</code>. The shape is KIO2's to define; the orchestrator stores it verbatim and passes it to dependent steps as <code>data.upstream.&lt;step_id&gt;</code>. One of four shapes below — jump to <a href="#capabilities">Capabilities &amp; outputs</a>.</td></tr>
+          <tr><td class="fname">error</td><td><span class="tag type">string | null</span></td><td class="fdesc">Why the task could not be completed. Null when status is <code>"ok"</code>. Free-text today — see the <a href="#roadmap">roadmap</a> for a proposed closed error vocabulary.</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+
+    <h3 style="margin-top:22px;">Shared building blocks <span class="path" style="font-weight:500;color:var(--text-faint);">$defs</span></h3>
+    <details class="group" open>
+      <summary>traceRef</summary>
+      <div class="body">
+        <p class="muted">Handle for the recording a result came from, of the form <code>kio2://trace/&lt;token&gt;</code>.
+          Pass it back as <code>data.trace_ref</code> to replay or compare the same execution. Opaque on purpose — an
+          absolute path would expose KIO2's deployment layout — and stateless: any KIO2 instance sharing the trace
+          directory resolves it. Only resolvable within the configured trace directory.</p>
+        <pre class="json" data-json='"kio2://trace/L3RtcC9raW8yXzlmMmMueG1s"'></pre>
+      </div>
+    </details>
+    <details class="group">
+      <summary>finding <span class="path">one implicated statement</span></summary>
+      <div class="body">
+        <table class="field-table">
+          <tbody>
+            <tr><td class="fname">file</td><td><span class="tag type">string</span></td><td class="fdesc">Source file, relative to the repository root, POSIX-separated.</td></tr>
+            <tr><td class="fname">function</td><td><span class="tag type">string</span></td><td class="fdesc"></td></tr>
+            <tr><td class="fname">line</td><td><span class="tag type">integer ≥ 1</span></td><td class="fdesc"></td></tr>
+            <tr><td class="fname">confidence</td><td><span class="tag type">0–1</span></td><td class="fdesc">The run's confidence weighted by this statement's evidence strength, so the leading finding carries the confidence of the analysis as a whole.</td></tr>
+            <tr><td class="fname">score</td><td><span class="tag type">0–1</span></td><td class="fdesc">Evidence weight of the dependency kind alone.</td></tr>
+            <tr><td class="fname">dependency</td><td><span class="tag type">enum</span></td>
+              <td class="fdesc">Why this statement is on the slice.
+                <div style="margin-top:6px;">
+                  <span class="enum-v">criterion (1.0)</span><span class="enum-v">control (0.75)</span><span class="enum-v">data (0.5)</span>
+                </div>
+              </td></tr>
+            <tr><td class="fname">description</td><td><span class="tag type">string</span></td><td class="fdesc">The source line as recorded.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+    <details class="group">
+      <summary>recordedState</summary>
+      <div class="body"><p class="muted">Variable values as recorded, keyed by name. Values are the reprs captured at runtime, not live objects.</p></div>
+    </details>
+
+    <h3 id="capabilities" style="margin-top:26px;">Capabilities &amp; their output shapes</h3>
+    <p class="section-sub">Each capability produces exactly one <code>output</code> shape. Click through the tabs — the color threading each one is used consistently across this page.</p>
+
+    <div class="cap-grid">
+      <div class="cap-card" style="--dot:var(--c-loc);"><span class="cname" style="color:var(--c-loc);">bug_localization</span>
+        <div class="cdesc">Records the failing run, computes a backward dynamic slice from the crash, and ranks the statements on it (FR-KIO2-05).</div>
+        <div class="meta"><span><b>Needs:</b> entry point + repository</span><span><b>Returns:</b> summary + ranked findings</span></div>
+      </div>
+      <div class="cap-card" style="--dot:var(--c-diag);"><span class="cname" style="color:var(--c-diag);">diagnosis</span>
+        <div class="cdesc">The causal story behind the failure, read off the recording — not inferred by a model — plus a slice ready for KIO7's fix prompt.</div>
+        <div class="meta"><span><b>Needs:</b> same as bug_localization</span><span><b>Optional:</b> a reference (passing) run</span></div>
+      </div>
+      <div class="cap-card" style="--dot:var(--c-replay);"><span class="cname" style="color:var(--c-replay);">replay</span>
+        <div class="cdesc">Stateless, read-only post-mortem debugging over a trace that already exists — nothing is re-executed (FR-KIO2-02).</div>
+        <div class="meta"><span><b>Needs:</b> a trace_ref</span><span><b>Returns:</b> cursor + current statement + state</span></div>
+      </div>
+      <div class="cap-card" style="--dot:var(--c-align);"><span class="cname" style="color:var(--c-align);">trace_alignment</span>
+        <div class="cdesc">Compares control flow between two or more recorded runs (FR-KIO2-03). Identical executed-statement sequences ⇒ distance 0.</div>
+        <div class="meta"><span><b>Needs:</b> 2+ trace_refs</span><span><b>Returns:</b> pair distance, or a set matrix</span></div>
+      </div>
+    </div>
+
+    <div class="tabs" id="outputTabs">
+      <button class="tab-btn active" data-tab="loc" style="--tabcolor:var(--c-loc);">localizationOutput</button>
+      <button class="tab-btn" data-tab="diag" style="--tabcolor:var(--c-diag);">diagnosisOutput</button>
+      <button class="tab-btn" data-tab="replay" style="--tabcolor:var(--c-replay);">replayOutput</button>
+      <button class="tab-btn" data-tab="align" style="--tabcolor:var(--c-align);">alignmentOutput</button>
+    </div>
+
+    <div class="tab-panel" data-panel="loc">
+      <div class="table-wrap">
+      <table class="field-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td class="fname">summary</td><td><span class="tag type">string</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">verdict</td><td><span class="tag type">enum</span></td><td class="fdesc">defect · clean · inconclusive</td></tr>
+          <tr><td class="fname">defect_found</td><td><span class="tag type">boolean</span></td><td class="fdesc">Convenience mirror of <code>verdict == "defect"</code>.</td></tr>
+          <tr><td class="fname">findings</td><td><span class="tag type">finding[]</span></td><td class="fdesc">Implicated statements, strongest evidence first. Empty when the target ran cleanly.</td></tr>
+          <tr><td class="fname">crash_state</td><td><span class="tag type">recordedState</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">criterion</td><td><span class="tag type">string</span></td><td class="fdesc">Where the analysis started, e.g. <code>exception@shop/pricing.py:11</code>.</td></tr>
+          <tr><td class="fname">slice_size</td><td><span class="tag type">integer ≥ 0</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">confidence</td><td><span class="tag type">0–1</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">trace_ref</td><td><span class="tag type">traceRef</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">hitl_required</td><td><span class="tag type">boolean</span></td><td class="fdesc">True when the result is too weak to act on unreviewed.</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="code-label">Example</div>
+      <pre class="json" data-json='{
+  "workflow_id": "wf-bug-pay01", "step_id": "s2", "agent_id": "KIO2",
+  "status": "ok",
+  "output": {
+    "summary": "Located the fault at shop/pricing.py:11 (discounted).",
+    "verdict": "defect",
+    "defect_found": true,
+    "findings": [
+      { "file": "shop/pricing.py", "function": "discounted", "line": 11,
+        "confidence": 0.85, "score": 1.0, "dependency": "criterion",
+        "description": "rate = {\"gold\": 0.20, \"silver\": 0.10}[tier]" },
+      { "file": "shop/orders.py", "function": "order_total", "line": 9,
+        "confidence": 0.425, "score": 0.5, "dependency": "data",
+        "description": "return discounted(net, tier)" }
+    ],
+    "crash_state": { "net": "230", "tier": "&#39;bronze&#39;" },
+    "criterion": "exception@pricing.py:11",
+    "slice_size": 6,
+    "confidence": 0.85,
+    "trace_ref": "kio2://trace/QzpcVXNlcnPigKY=",
+    "hitl_required": false
+  },
+  "error": null
+}'></pre>
+    </div>
+
+    <div class="tab-panel" data-panel="diag" hidden>
+      <div class="table-wrap">
+      <table class="field-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td class="fname">summary</td><td><span class="tag type">string</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">verdict</td><td><span class="tag type">enum</span></td><td class="fdesc">defect · clean · inconclusive</td></tr>
+          <tr><td class="fname">root_cause</td><td><span class="tag type">string</span></td><td class="fdesc">Read off the recording, not inferred by a language model: the statement that failed, the values in scope, and the statements that produced them.</td></tr>
+          <tr><td class="fname">evidence</td><td><span class="tag type">object[]</span></td>
+            <td class="fdesc">Each item has <code>kind</code> (<span class="enum-v">recorded_value</span><span class="enum-v">divergence</span><span class="enum-v">value_difference</span>), an optional <code>at</code>, and <code>detail</code>.</td></tr>
+          <tr><td class="fname">compared_runs</td><td><span class="tag type">integer ≥ 1</span></td><td class="fdesc">1 for the failing run alone; 2 when a reference run was supplied.</td></tr>
+          <tr><td class="fname">slice_context</td><td><span class="tag type">string</span></td><td class="fdesc">The value-annotated program slice — KIO2's contribution to fix generation. Hand it to KIO7 rather than asking KIO2 for a patch.</td></tr>
+          <tr><td class="fname">confidence</td><td><span class="tag type">0–1</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">trace_ref</td><td><span class="tag type">traceRef</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">hitl_required</td><td><span class="tag type">boolean</span></td><td class="fdesc"></td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="code-label">Example</div>
+      <pre class="json" data-json='{
+  "status": "ok",
+  "output": {
+    "summary": "Localised to discounted L11: rate = {…}[tier]  (6 suspect statement(s))",
+    "verdict": "defect",
+    "root_cause": "discounted at shop/pricing.py:11 failed executing `rate = {…}[tier]`, with net=230, tier=&#39;bronze&#39; in scope. Those values are produced by: order_total:8 net += net_price(it); …",
+    "evidence": [
+      { "kind": "recorded_value", "at": "shop/pricing.py:11", "detail": "tier = &#39;bronze&#39;" },
+      { "kind": "value_difference", "detail": "tier: &#39;bronze&#39; here vs &#39;gold&#39; in the reference run" }
+    ],
+    "compared_runs": 2,
+    "slice_context": "<value-annotated slice, ready for a fix prompt>",
+    "confidence": 0.85,
+    "trace_ref": "kio2://trace/L3RtcC9raW8yXzlmMmMueG1s"
+  },
+  "error": null
+}'></pre>
+    </div>
+
+    <div class="tab-panel" data-panel="replay" hidden>
+      <div class="table-wrap">
+      <table class="field-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td class="fname">summary</td><td><span class="tag type">string</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">cursor</td><td><span class="tag type">integer ≥ 0</span></td><td class="fdesc">Position on the timeline. Stateless: send it back as <code>data.seq</code> to continue from here.</td></tr>
+          <tr><td class="fname">total</td><td><span class="tag type">integer ≥ 0</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">can_forward / can_back</td><td><span class="tag type">boolean</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">current</td><td><span class="tag type">object</span></td>
+            <td class="fdesc">The executed statement at the cursor and the state recorded there — <code>{function, file, line, source, depth, state}</code>, where <code>depth</code> is the call-stack depth that <code>step over</code> / <code>step out</code> are computed from.</td></tr>
+          <tr><td class="fname">timeline</td><td><span class="tag type">object[]</span></td><td class="fdesc">Neighbouring line-events, for a scrubber.</td></tr>
+          <tr><td class="fname">def_of</td><td><span class="tag type">object | null</span></td><td class="fdesc">The statement that last gave a requested variable its value (def-use).</td></tr>
+          <tr><td class="fname">trace_ref</td><td><span class="tag type">traceRef</span></td><td class="fdesc"></td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="code-label">Example</div>
+      <pre class="json" data-json='{
+  "status": "ok",
+  "output": {
+    "summary": "Stepped to shop/pricing.py:11 (discounted).",
+    "cursor": 42, "total": 118,
+    "can_forward": true, "can_back": true,
+    "current": {
+      "function": "discounted", "file": "shop/pricing.py", "line": 11,
+      "source": "rate = {\"gold\": 0.20, \"silver\": 0.10}[tier]",
+      "depth": 2,
+      "state": { "tier": { "value": "&#39;bronze&#39;", "type": "str" }, "net": { "value": "230", "type": "int" } }
+    },
+    "timeline": [ { "line": 40 }, { "line": 41 }, { "line": 11 } ],
+    "def_of": null,
+    "trace_ref": "kio2://trace/L3RtcC9raW8yXzlmMmMueG1s"
+  },
+  "error": null
+}'></pre>
+    </div>
+
+    <div class="tab-panel" data-panel="align" hidden>
+      <div class="table-wrap">
+      <table class="field-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td class="fname">summary</td><td><span class="tag type">string</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">mode</td><td><span class="tag type">enum</span></td><td class="fdesc"><code>pair</code> for two traces, <code>set</code> for three or more.</td></tr>
+          <tr><td class="fname">distance</td><td><span class="tag type">integer ≥ 0</span></td><td class="fdesc">Alignment cost between two runs. 0 for identical executed-statement sequences — the FR-KIO2-03 invariant. Compares control flow only: same path, different data ⇒ distance 0, and that shows up in <code>delta</code>.</td></tr>
+          <tr><td class="fname">normalized_distance</td><td><span class="tag type">0–1</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">matched / gaps</td><td><span class="tag type">integer ≥ 0</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">aligned</td><td><span class="tag type">boolean</span></td><td class="fdesc">Whether the cursor position exists in both runs.</td></tr>
+          <tr><td class="fname">delta</td><td><span class="tag type">object[]</span></td><td class="fdesc">Variables whose recorded values differ at the aligned point — <code>{name, a, b}</code>.</td></tr>
+          <tr><td class="fname">divergences</td><td><span class="tag type">object[]</span></td><td class="fdesc">Contiguous stretches executed by only one of the two runs — <code>{side, start, end, length, at}</code>.</td></tr>
+          <tr><td class="fname">matrix</td><td><span class="tag type">number[][]</span></td><td class="fdesc">Pairwise normalized distances for a set: symmetric, zero on the diagonal.</td></tr>
+          <tr><td class="fname">lengths</td><td><span class="tag type">integer[]</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">reference / outlier</td><td><span class="tag type">integer | null</span></td><td class="fdesc">Index of the medoid, and of the run furthest from it. With an unlabeled set, <code>outlier</code> is the one to look at first.</td></tr>
+          <tr><td class="fname">mean_distance</td><td><span class="tag type">number ≥ 0</span></td><td class="fdesc"></td></tr>
+          <tr><td class="fname">reference_trace_ref / outlier_trace_ref / trace_refs</td><td><span class="tag type">traceRef(s)</span></td><td class="fdesc"></td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="code-label">Example — two-run comparison (mode: "pair")</div>
+      <pre class="json" data-json='{
+  "status": "ok",
+  "output": {
+    "summary": "2 runs compared: 1 divergence, 1 value difference at the aligned cursor.",
+    "mode": "pair",
+    "distance": 0, "normalized_distance": 0.0,
+    "matched": 24, "gaps": 0, "aligned": true,
+    "delta": [ { "name": "tier", "a": "&#39;bronze&#39;", "b": "&#39;gold&#39;" } ],
+    "divergences": []
+  },
+  "error": null
+}'></pre>
+    </div>
+  </section>
+
+  <!-- ===================== ALIASES ===================== -->
+  <section id="aliases">
+    <div class="section-head">
+      <div class="eyebrow">Field-name aliases</div>
+      <h2>One vocabulary, two spellings</h2>
+      <p class="section-sub">
+        The integration protocol document uses its own names for the <code>data</code> payload. Both vocabularies
+        are accepted at runtime, so the wording of that document does not have to be settled before wiring can start.
+      </p>
+    </div>
+    <div class="table-wrap">
+    <table class="plain">
+      <thead><tr><th>Integration document says</th><th>KIO2 canonical field</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td><code>source_location</code></td><td><code>repository.path</code></td><td>Repository root.</td></tr>
+        <tr><td><code>entrypoint</code></td><td><code>target.entry_point</code></td><td>The runnable script — the document has no field for this yet.</td></tr>
+        <tr><td><code>execution_trace</code></td><td><code>trace_ref</code></td><td>A recording produced by an earlier KIO2 step.</td></tr>
+        <tr><td><code>bug_report</code></td><td><code>failure</code></td><td>Accepted as a string or an object.</td></tr>
+        <tr><td><code>source_artifact</code></td><td>—</td><td>Recorded for traceability; KIO2 needs a path, not a name.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="callout warn" style="margin-top:18px;">
+      <span class="ic">🔒</span>
+      <p><strong>Trace references are sandboxed.</strong> A <code>trace_ref</code> only resolves under
+        <code>KIO2_TRACE_DIR</code> (default: the system temp directory). Without that check, a crafted ref could
+        make KIO2 parse an arbitrary file and return its contents as "recorded state" — the adapter is the network
+        edge. Bare paths are still accepted from local/library callers only.</p>
+    </div>
+  </section>
+
+  <!-- ===================== ROADMAP ===================== -->
+  <section id="roadmap">
+    <div class="section-head">
+      <div class="eyebrow">Protocol v0.3 · docs/PROTOCOL_V03_TODO.md</div>
+      <h2>What v0.3 asks for that isn't built yet</h2>
+      <p class="section-sub">
+        Most of protocol v0.3 documents what the code already does (rendered above). A handful of items are written
+        there as <strong>proposed</strong> and are <em>not implemented</em> in this contract yet — listed here so the
+        schemas above aren't mistaken for the finished picture.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>1 · Asynchronous processing for long analyses</h3><span class="status-pill proposed">proposed</span></div>
+      <p class="muted">KIO2 executes the program under analysis, so its runtime is the target's runtime — bounded
+        today by KIO1's 60s <code>request_timeout</code> and KIO2's 45s <code>KIO2_TRACE_BUDGET</code>. The proposed
+        fix is the 202 + job pattern already used by KIO9/KIO12: <code>POST /execute</code> can return
+        <strong>HTTP 202</strong> with a <code>job</code> object, polled via <code>GET /jobs/{job_id}</code> and
+        <code>GET /jobs/{job_id}/result</code>, cancellable via <code>DELETE</code>.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>2 · Closed error vocabulary</h3><span class="status-pill proposed">proposed</span></div>
+      <p class="muted">Today <code>error</code> is free text, so a caller cannot tell "no entry point" from "the
+        target crashed the tracer" without parsing prose. Proposed replacement:
+        <code>{error_code, error_message, retryable}</code>.</p>
+      <div class="table-wrap">
+      <table class="plain">
+        <thead><tr><th>Code</th><th>Retryable</th><th>Raised when</th></tr></thead>
+        <tbody>
+          <tr><td><code>malformed_request</code></td><td>no</td><td>the body is not a usable execution message</td></tr>
+          <tr><td><code>unsupported_capability</code></td><td>no</td><td>capability not declared (incl. <code>fix_recommendation</code>)</td></tr>
+          <tr><td><code>entry_point_missing</code></td><td>no</td><td>no entry point in <code>data</code> nor in <code>data.upstream</code></td></tr>
+          <tr><td><code>artifact_unavailable</code></td><td>once</td><td>repository root or entry point unreadable</td></tr>
+          <tr><td><code>trace_unavailable</code></td><td>once</td><td><code>trace_ref</code> does not resolve or cannot be read</td></tr>
+          <tr><td><code>trace_ref_refused</code></td><td>no</td><td>ref resolves outside <code>KIO2_TRACE_DIR</code></td></tr>
+          <tr><td><code>analysis_failed</code></td><td>no</td><td>recording or slicing failed</td></tr>
+          <tr><td><code>deadline_exceeded</code></td><td>with a larger budget</td><td>recording hit <code>KIO2_TRACE_BUDGET</code></td></tr>
+          <tr><td><code>service_unavailable</code></td><td>yes</td><td>starting up or shutting down</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>3 · Authentication &amp; authorisation (profile R)</h3><span class="status-pill proposed">proposed</span></div>
+      <p class="muted"><code>/execute</code> accepts a repository path and an entry point from anyone who can reach
+        it, then runs them — remote code execution by design. Profile P (no auth) stays the prototype default;
+        profile R would add TLS, a bearer token or mTLS, and per-capability scopes.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>4 · Retention &amp; masking of recorded values</h3><span class="status-pill proposed">proposed</span></div>
+      <p class="muted"><code>crash_state</code>, replay <code>state</code>, and diagnosis evidence carry real values
+        from the executed run, and traces are never deleted today. Proposed: a <code>KIO2_TRACE_TTL</code> (or an
+        explicit delete endpoint) plus a sweep, and an optional value-masking reply mode.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>5 · Smaller items</h3><span class="status-pill proposed">proposed</span></div>
+      <ul class="muted" style="margin:6px 0 0; padding-left:18px;">
+        <li><code>GET /tasks</code> should publish <code>languages: ["python"]</code>.</li>
+        <li>A <code>status: "skipped"</code> value, for a capability this deployment does not serve.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    <div><strong>Sources in this repository</strong></div>
+    <ul>
+      <li><code>src/kio2/schemas/kio2.request.schema.json</code> — the request contract (JSON Schema draft 2020-12)</li>
+      <li><code>src/kio2/schemas/kio2.response.schema.json</code> — the response contract</li>
+      <li><code>docs/INTEGRATION.md</code> — the verified integration guide this page draws its examples from</li>
+      <li><code>docs/PROTOCOL_V03_TODO.md</code> — what v0.3 of the integration protocol still asks for</li>
+    </ul>
+    <div>Also served live by KIO2 itself at <code>GET /schema</code> (both, keyed <code>request</code>/<code>response</code>) and <code>GET /schema?name=response</code>.</div>
+  </footer>
+</main>
+
+<script>
+(function(){
+  // Theme toggle
+  var btn = document.getElementById('themeBtn');
+  var root = document.documentElement;
+  try {
+    var saved = localStorage.getItem('kio2-theme');
+    if (saved) root.setAttribute('data-theme', saved);
+  } catch(e){}
+  btn.addEventListener('click', function(){
+    var current = root.getAttribute('data-theme');
+    var next;
+    if (!current) next = matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark';
+    else next = current === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('kio2-theme', next); } catch(e){}
+  });
+
+  // Output shape tabs
+  var tabs = document.querySelectorAll('#outputTabs .tab-btn');
+  var panels = document.querySelectorAll('.tab-panel');
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){
+      tabs.forEach(function(x){ x.classList.remove('active'); });
+      t.classList.add('active');
+      var name = t.getAttribute('data-tab');
+      panels.forEach(function(p){ p.hidden = p.getAttribute('data-panel') !== name; });
+    });
+  });
+
+  // Minimal JSON syntax highlighting
+  function highlight(json){
+    json = json.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
+      function (match){
+        var cls = 'n';
+        if (/^"/.test(match)) cls = /:$/.test(match) ? 'k' : 's';
+        else if (/true|false/.test(match)) cls = 'b';
+        else if (/null/.test(match)) cls = 'p';
+        return '<span class="' + cls + '">' + match + '</span>';
+      });
+  }
+  document.querySelectorAll('pre.json[data-json]').forEach(function(pre){
+    pre.innerHTML = highlight(pre.getAttribute('data-json'));
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,184 @@
+"""Optional OpenTelemetry instrumentation for KIO2.
+
+Designed for the AI4SWENG program-wide observability stack: each KIO emits
+spans and metrics to the *global* OpenTelemetry providers, and the host
+environment (the OTEL collector / Grafana setup being developed in parallel)
+wires the actual OTLP exporter via standard env vars. This module therefore
+never configures an exporter itself — it only emits.
+
+If ``opentelemetry`` is not installed, every call here is a no-op, so the
+core service runs unchanged with or without the observability stack.
+"""
+
+from __future__ import annotations
+
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+
+try:  # OTel is optional
+    from opentelemetry import metrics, trace
+
+    _tracer = trace.get_tracer("kio2")
+    _meter = metrics.get_meter("kio2")
+    _dur = _meter.create_histogram(
+        "kio2.localization.duration", unit="ms",
+        description="Wall time of a KIO2 fault-localization run",
+    )
+    _suspects = _meter.create_histogram(
+        "kio2.localization.suspect_count", unit="1",
+        description="Number of suspect statements returned",
+    )
+    _conf = _meter.create_histogram(
+        "kio2.localization.confidence", unit="1",
+        description="Localization confidence (0..1)",
+    )
+    _runs = _meter.create_counter(
+        "kio2.localization.runs", unit="1",
+        description="Count of localization runs by status",
+    )
+    _task_dur = _meter.create_histogram(
+        "kio2.task.duration", unit="ms",
+        description="Wall time of a KIO2 task by task_type (replay, trace_alignment, …)",
+    )
+    _task_runs = _meter.create_counter(
+        "kio2.task.runs", unit="1",
+        description="Count of KIO2 task executions by task_type and status",
+    )
+    _OTEL = True
+except Exception:  # pragma: no cover - depends on host env
+    _OTEL = False
+
+
+@contextmanager
+def localization_span(session_id: str, target: str = "") -> Iterator[dict]:
+    """Wrap a localization run in a span; yields a dict to stash timing.
+
+    Usage::
+
+        with localization_span(sid, target) as ctx:
+            result = localize(inp)
+            ctx["result"] = result
+        # metrics are recorded on exit
+    """
+    ctx: dict = {"_t0": time.perf_counter()}
+    if not _OTEL:
+        try:
+            yield ctx
+        finally:
+            _record_from_ctx(ctx)
+        return
+
+    with _tracer.start_as_current_span("kio2.localize") as span:
+        span.set_attribute("kio2.session_id", session_id)
+        if target:
+            span.set_attribute("kio2.target", target)
+        try:
+            yield ctx
+        finally:
+            result = ctx.get("result")
+            if result is not None:
+                span.set_attribute("kio2.status", getattr(result, "status", "UNKNOWN"))
+                span.set_attribute("kio2.confidence", float(getattr(result, "confidence", 0.0)))
+                span.set_attribute("kio2.suspect_count", int(getattr(result, "slice_size", 0)))
+            _record_from_ctx(ctx)
+
+
+def _record_from_ctx(ctx: dict) -> None:
+    if not _OTEL:
+        return
+    duration_ms = (time.perf_counter() - ctx.get("_t0", time.perf_counter())) * 1000.0
+    result = ctx.get("result")
+    status = getattr(result, "status", "UNKNOWN") if result is not None else "ERROR"
+    attrs = {"status": status}
+    try:
+        _dur.record(duration_ms, attrs)
+        _runs.add(1, attrs)
+        if result is not None:
+            _suspects.record(int(getattr(result, "slice_size", 0)), attrs)
+            _conf.record(float(getattr(result, "confidence", 0.0)), attrs)
+    except Exception:  # pragma: no cover
+        pass
+
+
+@contextmanager
+def task_span(task_type: str, session_id: str, target: str = "") -> Iterator[dict]:
+    """Wrap a non-localization KIO2 task (replay, trace alignment) in a span.
+
+    Same shape as :func:`localization_span` — stash the result in ``ctx["result"]``
+    and the duration/outcome metrics are recorded on exit — but the emitted
+    instruments carry a ``task_type`` attribute so the dashboards can separate
+    post-mortem navigation (FR-KIO2-02) from trace comparison (FR-KIO2-03).
+    """
+    ctx: dict = {"_t0": time.perf_counter()}
+    if not _OTEL:
+        try:
+            yield ctx
+        finally:
+            _record_task(task_type, ctx)
+        return
+
+    with _tracer.start_as_current_span(f"kio2.{task_type}") as span:
+        span.set_attribute("kio2.session_id", session_id)
+        span.set_attribute("kio2.task_type", task_type)
+        if target:
+            span.set_attribute("kio2.target", target)
+        try:
+            yield ctx
+        finally:
+            result = ctx.get("result")
+            if result is not None:
+                span.set_attribute("kio2.status", getattr(result, "status", "UNKNOWN"))
+            _record_task(task_type, ctx)
+
+
+def _record_task(task_type: str, ctx: dict) -> None:
+    if not _OTEL:
+        return
+    duration_ms = (time.perf_counter() - ctx.get("_t0", time.perf_counter())) * 1000.0
+    result = ctx.get("result")
+    status = getattr(result, "status", "UNKNOWN") if result is not None else "ERROR"
+    attrs = {"task_type": task_type, "status": status}
+    try:
+        _task_dur.record(duration_ms, attrs)
+        _task_runs.add(1, attrs)
+    except Exception:  # pragma: no cover
+        pass
+
+
+@contextmanager
+def incoming_context(headers: dict) -> Iterator[None]:
+    """Continue the caller's trace for the duration of the block.
+
+    KIO1 sends a W3C ``traceparent`` header with every dispatched step. Adopting
+    it puts KIO2's spans in the same trace as the orchestrator's, so one failing
+    workflow reads as a single tree in Grafana instead of disconnected fragments.
+    Ignoring the header costs nothing but that correlation, which is why every
+    failure path here degrades to a plain no-op.
+
+    ``asyncio.to_thread`` copies the current context, so a span opened here still
+    parents the work KIO2 runs in a worker thread.
+    """
+    token = None
+    context_module = None
+    if _OTEL:
+        try:
+            from opentelemetry import context as context_module
+            from opentelemetry.propagate import extract
+
+            token = context_module.attach(extract(headers))
+        except Exception:  # pragma: no cover - depends on host env
+            token = None
+    try:
+        yield
+    finally:
+        if token is not None and context_module is not None:
+            try:
+                context_module.detach(token)
+            except Exception:  # pragma: no cover
+                pass
+
+
+def otel_enabled() -> bool:
+    """True if OpenTelemetry is importable (metrics/spans will be emitted)."""
+    return _OTEL

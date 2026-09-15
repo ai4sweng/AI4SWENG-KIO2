@@ -1,0 +1,64 @@
+# FR-KIO2-01 — "Provide tooling to build, run, and lint" locally *and in CI*.
+#
+# KIO2 consumes FocusTracer (the independent trace/slice/replay engine) as a
+# library, so CI installs it from its repository first, then the KIO2 package.
+# The acceptance test for FR-KIO2-01 (tests/test_fr_kio2_01_language_support.py)
+# runs a Python target under the engine and validates the produced trace against
+# the XSD — that is the gate this workflow enforces on every push and PR.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # FocusTracer is public; its default branch is `master` (not `main`).
+  # For a private engine repo, swap this for a checkout that uses a PAT secret.
+  FOCUSTRACER_REF: "focustracer @ git+https://github.com/BitnetTR/focustracer.git@master"
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install ruff
+      - name: ruff check
+        run: ruff check .
+
+  test:
+    name: Test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install FocusTracer (engine)
+        run: pip install "${FOCUSTRACER_REF}"
+
+      - name: Install KIO2 + dev deps
+        run: pip install -e ".[dev]"
+
+      - name: Show engine version
+        run: python -c "import focustracer, focustracer.core.align, focustracer.core.slicer; print('focustracer OK:', focustracer.__file__)"
+
+      - name: pytest
+        run: pytest -q

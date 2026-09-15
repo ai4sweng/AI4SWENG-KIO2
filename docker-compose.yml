@@ -1,0 +1,23 @@
+services:
+  kio2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # İhtiyaç halinde farklı bir commit/branch belirtilebilir:
+        - FOCUSTRACER_REF=git+https://github.com/BitnetTR/focustracer.git@master
+    container_name: ai4sweng-kio2
+    restart: unless-stopped
+    ports:
+      # Host:Container
+      - "8102:8102"
+    environment:
+      - KIO_HOST=0.0.0.0
+      - KIO_PORT=8102
+      # Servisin ihtiyaç duyabileceği ek ortam değişkenleri buraya eklenebilir
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8102/health/')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai4sweng-kio2"
+version = "1.0.6"
+description = "AI4SWENG KIO2 — Bug Locate & Fix: Reverse Execution & Dynamic Slicing (BitNet)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "BitNet" }]
+
+dependencies = [
+    # FocusTracer is the independent trace/slicing engine KIO2 consumes as a
+    # library — NOT vendored. Install it from source (see requirements.txt):
+    #   pip install -e path/to/focustracer
+    # or from Git. Listed here so a pre-installed copy satisfies the dep.
+    "focustracer>=1.9",  # needs core.slicer / core.reverse / core.explain / core.replay / core.align
+                         # (>=1.9 for align.TraceSet + AlignedPair.seek/step/state_delta)
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+observability = ["opentelemetry-sdk", "opentelemetry-exporter-otlp"]
+dev = ["pytest>=7.4", "httpx>=0.27"]  # httpx powers fastapi.testclient (tests/test_http_contract.py)
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["kio2*"]
+
+[tool.setuptools.package-data]
+# The schemas are served at runtime from GET /schema, so they are package data.
+"kio2" = ["examples/*.py", "schemas/*.json"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+# FR-KIO2-01: minimal lint / code-style tooling for the PoC.
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]  # line length handled by formatter; don't fail builds on it
