@@ -1,0 +1,252 @@
+{
+ "replay": {
+  "small_trace": {
+   "lines": 11,
+   "load_ms": 0.3,
+   "fwd_call_ms": 0.3,
+   "back_call_ms": 0.3,
+   "samples": 10
+  },
+  "large_trace": {
+   "lines": 2003,
+   "load_ms": 37.0,
+   "fwd_call_ms": 38.3,
+   "back_call_ms": 36.8,
+   "samples": 41
+  }
+ },
+ "align": [
+  {
+   "prog": "01",
+   "status": "DONE",
+   "mode": "pair",
+   "distance": 3,
+   "norm": 0.375,
+   "matched": 6,
+   "gaps": 3,
+   "n_div": 2,
+   "first_divs": [
+    {},
+    {}
+   ],
+   "gt_line": 6,
+   "raw0": {
+    "side": "b",
+    "start": 2,
+    "end": 3,
+    "length": 1,
+    "at": 1
+   }
+  },
+  {
+   "prog": "02",
+   "status": "DONE",
+   "mode": "pair",
+   "distance": 1,
+   "norm": 0.333,
+   "matched": 2,
+   "gaps": 1,
+   "n_div": 1,
+   "first_divs": [
+    {}
+   ],
+   "gt_line": 4,
+   "raw0": {
+    "side": "b",
+    "start": 2,
+    "end": 3,
+    "length": 1,
+    "at": 1
+   }
+  },
+  {
+   "prog": "04",
+   "status": "DONE",
+   "mode": "pair",
+   "distance": 2,
+   "norm": 0.667,
+   "matched": 1,
+   "gaps": 0,
+   "n_div": 0,
+   "first_divs": [],
+   "gt_line": 3,
+   "raw0": null
+  }
+ ],
+ "localize": [
+  {
+   "prog": "01",
+   "criterion_given": "10:total",
+   "status": "DONE",
+   "criterion": "01_siparis_toplami_hesaplama.py:10:total",
+   "confidence": 0.85,
+   "slice_size": 6,
+   "gt_line": 6,
+   "gt_rank": 5,
+   "n": 6,
+   "ranking": [
+    [
+     1,
+     10,
+     "criterion",
+     1.0,
+     "return total"
+    ],
+    [
+     2,
+     7,
+     "control",
+     0.75,
+     "if total < discount_threshold:"
+    ],
+    [
+     3,
+     2,
+     "data",
+     0.5,
+     "total = 0"
+    ],
+    [
+     4,
+     3,
+     "data",
+     0.5,
+     "for item in cart_items:"
+    ],
+    [
+     5,
+     6,
+     "data",
+     0.5,
+     "total += item['price']"
+    ],
+    [
+     6,
+     9,
+     "data",
+     0.5,
+     "total = total * 0.90"
+    ]
+   ]
+  },
+  {
+   "prog": "02",
+   "criterion_given": null,
+   "status": "DONE",
+   "criterion": "exception@02_kullanici_profil_guncelleme.py:4",
+   "confidence": 0.85,
+   "slice_size": 2,
+   "gt_line": 4,
+   "gt_rank": 1,
+   "n": 2,
+   "ranking": [
+    [
+     1,
+     4,
+     "criterion",
+     1.0,
+     "user_data = user_db[0]"
+    ],
+    [
+     2,
+     3,
+     "control",
+     0.75,
+     "if user_id in user_db:"
+    ]
+   ]
+  },
+  {
+   "prog": "04",
+   "criterion_given": "5",
+   "status": "DONE",
+   "criterion": "04_banka_hesabi_para_cekme.py:5",
+   "confidence": 0.85,
+   "slice_size": 2,
+   "gt_line": 3,
+   "gt_rank": 2,
+   "n": 2,
+   "ranking": [
+    [
+     1,
+     5,
+     "criterion",
+     1.0,
+     "return account['balance']"
+    ],
+    [
+     2,
+     3,
+     "control",
+     0.75,
+     "if account['balance'] >= amount:"
+    ]
+   ]
+  }
+ ],
+ "verdict": [
+  {
+   "case": "01 buggy",
+   "expect": "defect",
+   "verdict": "defect",
+   "defect_found": true,
+   "status": "DONE",
+   "n_findings": 6,
+   "match": true
+  },
+  {
+   "case": "02 buggy",
+   "expect": "defect",
+   "verdict": "defect",
+   "defect_found": true,
+   "status": "DONE",
+   "n_findings": 2,
+   "match": true
+  },
+  {
+   "case": "03 clean",
+   "expect": "clean",
+   "verdict": "clean",
+   "defect_found": false,
+   "status": "DONE",
+   "n_findings": 0,
+   "match": true
+  },
+  {
+   "case": "04 buggy",
+   "expect": "defect",
+   "verdict": "defect",
+   "defect_found": true,
+   "status": "DONE",
+   "n_findings": 2,
+   "match": true
+  },
+  {
+   "case": "01 fixed",
+   "expect": "clean",
+   "verdict": "clean",
+   "defect_found": false,
+   "status": "DONE",
+   "n_findings": 0,
+   "match": true
+  },
+  {
+   "case": "02 fixed",
+   "expect": "clean",
+   "verdict": "clean",
+   "defect_found": false,
+   "status": "DONE",
+   "n_findings": 0,
+   "match": true
+  },
+  {
+   "case": "04 fixed",
+   "expect": "clean",
+   "verdict": "clean",
+   "defect_found": false,
+   "status": "DONE",
+   "n_findings": 0,
+   "match": true
+  }
+ ]
+}
