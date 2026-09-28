@@ -656,7 +656,7 @@ def _handle_trace_alignment(message: ExecutionMessage) -> dict[str, Any]:
     result = compare(AlignInput(trace_paths=paths, **_nav_fields(data, ("include_pairs",))))
     if result.status == "FAILED":
         detail = result.error or ""
-        for path, ref in zip(paths, refs):
+        for path, ref in zip(paths, refs, strict=True):
             detail = detail.replace(path, ref)
         raise _TaskFailed(f"{result.message} {detail}".strip())
 
