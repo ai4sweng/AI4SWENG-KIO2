@@ -22,6 +22,18 @@ from pathlib import Path
 #: headroom. Exceeding it is reported rather than silently truncated.
 MAX_AUTO_TARGETS = 400
 
+
+def trace_dir() -> Path:
+    """Where recordings are written: ``KIO2_TRACE_DIR``, else the system temp directory.
+
+    The same directory is the only one a trace reference may resolve into
+    (``kio2.kio1.TRACE_ROOT``), so writing anywhere else would make every
+    recording unreachable to replay and alignment.
+    """
+    path = Path(os.environ.get("KIO2_TRACE_DIR") or tempfile.gettempdir()).resolve()
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
 #: Directories that never contain the program under analysis.
 _SKIP_DIRS = frozenset({
     ".git", ".hg", ".svn", "__pycache__", ".venv", "venv", "env", ".env",
@@ -150,7 +162,7 @@ def run_trace(
         raise RunnerError(f"target script not found: {script}")
 
     if output_path is None:
-        output_path = str(Path(tempfile.gettempdir()) / f"kio2_{uuid.uuid4().hex}.xml")
+        output_path = str(trace_dir() / f"kio2_{uuid.uuid4().hex}.xml")
 
     targets = list(functions or [])
     if not targets:

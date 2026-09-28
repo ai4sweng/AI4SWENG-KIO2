@@ -96,7 +96,7 @@ pip install -e ".[dev]"                    # KIO2 service + pytest
 python -c "from kio2 import localize; from kio2.dummy import dummy_input; print(localize(dummy_input()).message)"
 
 # API service:
-python -m kio2.main                        # POST /execute, GET /health/ on :8013
+python -m kio2.main                        # POST /execute, GET /health/ on :8102
 
 # lint + tests (same gates CI enforces):
 ruff check .
@@ -115,6 +115,13 @@ pytest -q
 docker build -t ai4sweng-kio2 .
 docker run -p 8102:8102 ai4sweng-kio2   # the port KIO1's registry has for KIO2
 ```
+
+Or via Compose (`docker compose up -d --build`), which also mounts `./workspace`
+(configurable via `KIO2_WORKSPACE` in a local `.env`, see
+[`.env.example`](.env.example)) into the container at `/workspace` — KIO2 can
+only trace code it can see, so a request's `target_script` /
+`working_directory` must be a path *inside* the container, not on the host.
+See [`docs/INTEGRATION.md`](docs/INTEGRATION.md) §6.
 
 ## API contract
 

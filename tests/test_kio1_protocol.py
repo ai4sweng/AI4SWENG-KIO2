@@ -517,3 +517,80 @@ def test_verdict_is_clean_for_a_healthy_program(client, healthy_repo):
 def test_diagnosis_carries_the_same_verdict(client, repo):
     out = client.post("/execute", json=message(kio1.CAP_DIAGNOSIS, repo)).json()["output"]
     assert out["verdict"] == "defect"
+
+
+# ── protocol v0.4 follow-ups (Table 16 items resolved in code) ──────────────
+
+
+def test_agent_id_is_always_kio2_even_when_addressed_in_lower_case(client, repo):
+    msg = message(kio1.CAP_BUG_LOCALIZATION, repo)
+    msg["agent_id"] = "kio2"
+    body = client.post("/execute", json=msg).json()
+    assert body["agent_id"] == "KIO2"
+
+
+def test_criterion_is_relative_to_the_repository_root(client, repo):
+    out = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()["output"]
+    assert out["criterion"].startswith("exception@shop/pricing.py:")
+    assert str(repo) not in out["criterion"]
+
+
+def test_diagnosis_summary_has_the_same_form_as_localization(client, repo):
+    loc = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()["output"]
+    dia = client.post("/execute", json=message(kio1.CAP_DIAGNOSIS, repo)).json()["output"]
+    assert dia["summary"] == loc["summary"]
+
+
+def _ref(client, repo):
+    return client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()["output"]["trace_ref"]
+
+
+def test_replay_reports_relative_paths(client, repo):
+    ref = _ref(client, repo)
+    out = client.post("/execute", json=message(
+        kio1.CAP_REPLAY, trace_ref=ref, at_exception=True,
+        repository={"path": str(repo)})).json()["output"]
+    assert out["current"]["file"] == "shop/pricing.py"
+    # without a root the bare file name is reported, never the container path
+    out = client.post("/execute", json=message(kio1.CAP_REPLAY, trace_ref=ref, at_exception=True)).json()["output"]
+    assert out["current"]["file"] == "pricing.py"
+
+
+def test_replay_passes_def_var_on(client, repo):
+    ref = _ref(client, repo)
+    out = client.post("/execute", json=message(
+        kio1.CAP_REPLAY, trace_ref=ref, at_exception=True, def_var="tier")).json()["output"]
+    assert out["def_of"] is not None
+    assert out["def_of"]["name"] == "tier"
+
+
+def test_trace_alignment_passes_include_pairs_on(client, repo):
+    ref = _ref(client, repo)
+    out = client.post("/execute", json=message(
+        kio1.CAP_TRACE_ALIGNMENT, trace_refs=[ref, ref], include_pairs=True)).json()["output"]
+    assert out["pairs"]
+    plain = client.post("/execute", json=message(
+        kio1.CAP_TRACE_ALIGNMENT, trace_refs=[ref, ref])).json()["output"]
+    assert "pairs" not in plain
+
+
+def test_upstream_repository_path_is_read(client, repo):
+    msg = message(kio1.CAP_BUG_LOCALIZATION,
+                  upstream={"s6": {"target": {"entry_point": "main.py"},
+                                   "repository": {"path": str(repo)}}})
+    body = client.post("/execute", json=msg).json()
+    assert body["status"] == "ok", body["error"]
+    assert body["output"]["findings"][0]["file"] == "shop/pricing.py"
+
+
+def test_trace_errors_do_not_disclose_the_trace_directory(client):
+    ref = kio1.make_trace_ref(str(kio1.TRACE_ROOT / "missing.xml"))
+    body = client.post("/execute", json=message(kio1.CAP_REPLAY, trace_ref=ref)).json()
+    assert body["status"] == "error"
+    assert str(kio1.TRACE_ROOT) not in body["error"]
+    outside = client.post("/execute", json=message(kio1.CAP_REPLAY, trace_ref="/etc/passwd")).json()
+    assert str(kio1.TRACE_ROOT) not in outside["error"]
+
+
+def test_tasks_publishes_the_language_scope(client):
+    assert client.get("/tasks").json()["languages"] == ["python"]

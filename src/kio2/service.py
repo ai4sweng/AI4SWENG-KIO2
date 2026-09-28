@@ -3,7 +3,7 @@
 Three task types share one ``/execute`` endpoint, selected by ``task_type`` in
 the payload (or inferred from its shape when omitted):
 
-- ``fault_localization`` — record, slice, rank suspects (FR-KIO2-05);
+- ``fault_localization`` — record, slice, rank suspects (FR-KIO2-07, FR-KIO2-05 in part);
 - ``replay`` — post-mortem navigation over a recorded trace (FR-KIO2-02);
 - ``trace_alignment`` — compare runs / curate a trace set (FR-KIO2-03).
 
@@ -23,11 +23,12 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from . import kio1
+from . import jobs, kio1
 from .comparator import compare
 from .contract import AlignInput, FaultLocalization, Kio2Input, ReplayInput
 from .localizer import localize
@@ -37,7 +38,7 @@ from .replayer import replay
 KIO_ID = "kio2"
 TITLE = "Bug Locate & Fix: Reverse Execution & Dynamic Slicing"
 
-TASK_LOCALIZE = "fault_localization"   # FR-KIO2-05 (via dynamic slicing)
+TASK_LOCALIZE = "fault_localization"   # FR-KIO2-07 + FR-KIO2-05 (in part); see protocol v0.4 Table 17
 TASK_REPLAY = "replay"                 # FR-KIO2-02
 TASK_ALIGN = "trace_alignment"         # FR-KIO2-03
 
@@ -143,7 +144,7 @@ async def _handle_align(payload: dict[str, Any], session_id: str) -> dict[str, A
 
 
 async def _handle_localize(payload: dict[str, Any], session_id: str) -> dict[str, Any]:
-    """FR-KIO2-05 — locate the fault behind a failing execution."""
+    """FR-KIO2-07 / FR-KIO2-05 (in part) — locate the fault behind a failing execution."""
     inp = _input_from_payload(payload)
     with localization_span(session_id, inp.target_script) as ctx:
         result = await asyncio.to_thread(localize, inp)
@@ -253,8 +254,19 @@ class JobRequest(BaseModel):
 def _standalone_app(kio_id: str, title: str):
     """Minimal FastAPI app mirroring the KIO /execute contract (no platform deps)."""
     from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
 
     app = FastAPI(title=f"{kio_id.upper()} — {title}", version="1.0.6")
+
+    # Deployment already assumes no auth (profile P — see docs/INTEGRATION.md §7);
+    # open CORS matches that posture and lets a browser-based caller (e.g. the
+    # docs/index.html playground) reach /execute directly from any origin.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.middleware("http")
     async def _adopt_caller_trace(request, call_next):
@@ -291,7 +303,17 @@ def _standalone_app(kio_id: str, title: str):
             "supported_tasks": _SUPPORTED_TASKS,        # KIO2's own contract
             "capabilities": kio1.CAPABILITIES,          # register these in KIO1's config.json
             "unsupported_capabilities": sorted(kio1.UNSUPPORTED_CAPABILITIES),
+            # FR-KIO2-01: the PoC traces Python only; publishing it lets a caller
+            # (e.g. a UC3 C++/HLS step) see the mismatch at integration time.
+            "languages": ["python"],
             "schema_url": "/schema",
+            # The asynchronous contract KIO1's dispatcher uses (kio2.jobs).
+            "job_contract": {
+                "schema_version": jobs.SCHEMA_VERSION,
+                "submit": "POST /jobs",
+                "poll": "GET /jobs/{job_id}",
+                "artifacts": sorted({*jobs.ARTIFACT_NAMES.values(), jobs.TRACE_ARTIFACT}),
+            },
         }
 
     @app.get("/schema")
@@ -330,6 +352,41 @@ def _standalone_app(kio_id: str, title: str):
             "message_type": "JOB_RESULT",
             "payload": result_payload,
         }
+
+    @app.get("/traces/{token}")
+    async def get_trace(token: str):
+        """The recorded trace XML behind a ``kio2://trace/<token>`` reference.
+
+        Opens in a browser as an XML tree. Resolved exactly like a trace_ref in
+        a request, so only files under the trace directory are ever served.
+        """
+        from fastapi import HTTPException, Response
+        try:
+            path = kio1.resolve_trace_ref(kio1.TRACE_REF_PREFIX + token)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return Response(content=Path(path).read_bytes(), media_type="application/xml")
+
+    # KIO1's dispatcher speaks the asynchronous job contract (kio2.jobs), not the
+    # /execute envelope above; both are served, over one implementation.
+    store = jobs.JobStore()
+
+    @app.post("/jobs")
+    async def submit_job(body: dict[str, Any]) -> dict[str, Any]:
+        from fastapi import HTTPException
+        try:
+            request = jobs.validate_request(body)
+        except jobs.RequestError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return store.submit(request)
+
+    @app.get("/jobs/{job_id}")
+    async def get_job(job_id: str) -> dict[str, Any]:
+        from fastapi import HTTPException
+        reply = store.get(job_id)
+        if reply is None:
+            raise HTTPException(status_code=404, detail=f"unknown job {job_id!r}")
+        return reply
 
     return app
 

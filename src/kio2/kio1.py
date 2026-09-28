@@ -34,16 +34,16 @@ import base64
 import binascii
 import json
 import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 from .comparator import compare
 from .contract import AlignInput, FaultLocalization, Kio2Input, ReplayInput
 from .localizer import localize
 from .replayer import replay
+from .runner import trace_dir
 
 AGENT_ID = "KIO2"
 
@@ -85,7 +85,7 @@ TRACE_BUDGET_SECONDS = float(os.environ.get("KIO2_TRACE_BUDGET", "45"))
 #: Traces may only be read from under here. KIO1 is internal, but the adapter is
 #: still the network edge: without this, a crafted `trace_ref` could make KIO2
 #: parse an arbitrary file and return its contents as "recorded state".
-TRACE_ROOT = Path(os.environ.get("KIO2_TRACE_DIR") or tempfile.gettempdir()).resolve()
+TRACE_ROOT = trace_dir()
 
 TRACE_REF_PREFIX = "kio2://trace/"
 
@@ -131,6 +131,11 @@ class ExecutionMessage(BaseModel):
     task: str = ""
     data: dict[str, Any] = Field(default_factory=dict)
 
+    #: Recording budget for this message. Set by the asynchronous job path, which
+    #: is not bound by a synchronous timeout; a private attribute, so a request
+    #: body cannot raise it.
+    _trace_budget: float | None = PrivateAttr(default=None)
+
 
 class AgentReply(BaseModel):
     """What KIO1 reads back. ``workflow_id`` / ``step_id`` are how it matches steps."""
@@ -168,6 +173,11 @@ def make_trace_ref(path: str) -> str:
     return TRACE_REF_PREFIX + token.rstrip("=")
 
 
+def trace_url(ref: str) -> str:
+    """The path at which this service serves the recording behind ``ref`` (GET)."""
+    return "/traces/" + ref[len(TRACE_REF_PREFIX):]
+
+
 def resolve_trace_ref(ref: str) -> str:
     """Turn a ``trace_ref`` (or a bare path) back into a readable trace file.
 
@@ -189,12 +199,14 @@ def resolve_trace_ref(ref: str) -> str:
         candidate = ref  # a bare path, for local callers
 
     path = Path(candidate).resolve()
+    # Messages name the reference as the caller sent it, never the resolved path
+    # or TRACE_ROOT: those would put the deployment layout into the reply.
     if not path.is_relative_to(TRACE_ROOT):
         raise ValueError(
-            f"trace reference points outside the trace directory ({TRACE_ROOT}); refused"
+            f"trace reference {ref} points outside the trace directory; refused"
         )
     if path.suffix.lower() != ".xml" or not path.is_file():
-        raise ValueError(f"trace not found: {candidate}")
+        raise ValueError(f"trace not found: {ref}")
     return str(path)
 
 
@@ -228,6 +240,30 @@ def _upstream_values(data: dict[str, Any], key: str) -> Any:
             if isinstance(block, dict) and block.get(key):
                 return block[key]
     return None
+
+
+def _upstream_repo_path(data: dict[str, Any]) -> Any:
+    """``repository.path`` of an upstream output (``_upstream_values`` only matches
+    a key by its own name, and ``path`` is too generic to look up everywhere)."""
+    upstream = data.get("upstream")
+    if not isinstance(upstream, dict):
+        return None
+    for output in upstream.values():
+        if isinstance(output, dict) and isinstance(output.get("repository"), dict):
+            if output["repository"].get("path"):
+                return output["repository"]["path"]
+    return None
+
+
+def _repo_root(data: dict[str, Any]) -> str:
+    """The repository root the caller named, from the message or its upstream steps."""
+    repository = data.get("repository") if isinstance(data.get("repository"), dict) else {}
+    return str(_first(
+        repository.get("path"), data.get("working_directory"),
+        # `source_location` is the integration document's name for the repo root.
+        data.get("source_location"), _upstream_values(data, "source_location"),
+        _upstream_repo_path(data),
+    ) or "")
 
 
 def _failure_context(data: dict[str, Any]) -> str | None:
@@ -265,7 +301,6 @@ def localization_input(message: ExecutionMessage) -> Kio2Input:
     """
     data = message.data or {}
     target = data.get("target") if isinstance(data.get("target"), dict) else {}
-    repository = data.get("repository") if isinstance(data.get("repository"), dict) else {}
 
     entry = _first(
         target.get("entry_point"), target.get("target_script"),
@@ -289,22 +324,23 @@ def localization_input(message: ExecutionMessage) -> Kio2Input:
 
     return Kio2Input(
         target_script=str(entry),
-        working_directory=str(_first(
-            repository.get("path"), data.get("working_directory"),
-            # `source_location` is the integration document's name for the repo root.
-            data.get("source_location"), _upstream_values(data, "source_location"),
-        ) or ""),
+        working_directory=_repo_root(data),
         functions=[str(f) for f in functions],
         criterion=data.get("criterion") or None,
         failing_test=_first(_failure_context(data), message.task) or None,
-        trace_timeout=TRACE_BUDGET_SECONDS,
+        trace_timeout=message._trace_budget or TRACE_BUDGET_SECONDS,
     )
 
 
-def _nav_fields(data: dict[str, Any]) -> dict[str, Any]:
-    """Cursor controls shared by the replay and alignment capabilities."""
-    keys = ("seq", "at_event", "at_line", "function", "at_exception",
-            "step", "step_action", "back", "window")
+_NAV_KEYS = ("seq", "at_event", "at_line", "function", "at_exception",
+             "step", "step_action", "back", "window")
+
+
+def _nav_fields(data: dict[str, Any], extra: tuple[str, ...] = ()) -> dict[str, Any]:
+    """Cursor controls shared by the replay and alignment capabilities, plus the
+    capability-specific options named in ``extra`` (``def_var`` for replay,
+    ``include_pairs`` for alignment), which would otherwise be dropped silently."""
+    keys = _NAV_KEYS + tuple(extra)
     return {k: data[k] for k in keys if k in data and data[k] is not None}
 
 
@@ -366,6 +402,32 @@ def _verdict(result: FaultLocalization) -> str:
     return "clean" if result.status == "DONE" else "inconclusive"
 
 
+def _criterion(result: FaultLocalization, root: str = "") -> str:
+    """``kind@FILE:LINE`` with FILE relative to the repo root, like every other path.
+
+    The engine labels the criterion with the bare file name; the criterion
+    statement's recorded file gives the full path to make relative. Anything that
+    cannot be matched is returned unchanged.
+    """
+    label = result.criterion or ""
+    kind, sep, rest = label.partition("@")
+    if not sep:
+        return label
+    for s in result.suspect_lines:
+        name = Path(s.file).name if s.file else ""
+        if s.dependency == "criterion" and name and rest.startswith(name + ":"):
+            return f"{kind}@{_relative(s.file, root)}{rest[len(name):]}"
+    return label
+
+
+def _summary(result: FaultLocalization, root: str = "") -> str:
+    """One line for a person, the same for localization and diagnosis."""
+    top = result.suspect_lines[0] if result.suspect_lines else None
+    if top is None:
+        return result.message.split("  [")[0]
+    return f"Located the fault at {_relative(top.file, root)}:{top.line} ({top.function})."
+
+
 def _findings(result: FaultLocalization, root: str = "") -> list[dict[str, Any]]:
     """Suspect statements in the shape KIO1's reference stub returns.
 
@@ -412,20 +474,19 @@ def localization_output(result: FaultLocalization, root: str = "") -> dict[str, 
             "defect_found": False,
             "findings": [],
             "crash_state": {},
-            "criterion": result.criterion,
+            "criterion": _criterion(result, root),
             "slice_size": 0,
             "confidence": result.confidence,
             "trace_ref": make_trace_ref(result.trace_path) if result.trace_path else None,
             "hitl_required": result.status == "REVIEW_REQUIRED",
         }
-    where = f"{_relative(top.file, root)}:{top.line} ({top.function})"
     return {
-        "summary": f"Located the fault at {where}.",
+        "summary": _summary(result, root),
         "verdict": _verdict(result),
         "defect_found": True,
         "findings": _findings(result, root),
         "crash_state": _flat_state(result.crash_state),
-        "criterion": result.criterion,
+        "criterion": _criterion(result, root),
         "slice_size": result.slice_size,
         "confidence": result.confidence,
         "trace_ref": make_trace_ref(result.trace_path) if result.trace_path else None,
@@ -491,7 +552,7 @@ def diagnosis_output(
             })
 
     return {
-        "summary": result.message.split("  [")[0],
+        "summary": _summary(result, root),
         "verdict": _verdict(result),
         "defect_found": bool(result.suspect_lines),
         "root_cause": _root_cause(result, root),
@@ -553,17 +614,30 @@ def _handle_replay(message: ExecutionMessage) -> dict[str, Any]:
             "no trace to replay: set data.trace_ref to a ref returned by a previous "
             f"'{CAP_BUG_LOCALIZATION}' or '{CAP_DIAGNOSIS}' step."
         )
-    view = replay(ReplayInput(trace_path=resolve_trace_ref(refs[0]), **_nav_fields(data)))
+    trace_path = resolve_trace_ref(refs[0])
+    view = replay(ReplayInput(trace_path=trace_path, **_nav_fields(data, ("def_var",))))
     if view.status == "FAILED":
-        raise _TaskFailed(view.error or view.message)
+        # The engine's error may quote the resolved path; name the ref instead.
+        detail = (view.error or "").replace(trace_path, refs[0])
+        raise _TaskFailed(f"{view.message} {detail}".strip())
+    # The recording holds container paths; report them the way the caller named
+    # its repository (bare file name when no root was given), as everywhere else.
+    root = _repo_root(data)
+    current = dict(view.current or {})
+    if current.get("file"):
+        current["file"] = _relative(current["file"], root)
+    timeline = [
+        {**e, "file": _relative(e["file"], root)} if isinstance(e, dict) and e.get("file") else e
+        for e in (view.timeline or [])
+    ]
     return {
         "summary": view.message,
         "cursor": view.cursor,
         "total": view.total,
         "can_forward": view.can_forward,
         "can_back": view.can_back,
-        "current": view.current,
-        "timeline": view.timeline,
+        "current": current,
+        "timeline": timeline,
         "def_of": view.def_of,
         "trace_ref": refs[0] if refs[0].startswith(TRACE_REF_PREFIX) else make_trace_ref(refs[0]),
     }
@@ -579,9 +653,12 @@ def _handle_trace_alignment(message: ExecutionMessage) -> dict[str, Any]:
             "curate them as a set)."
         )
     paths = [resolve_trace_ref(r) for r in refs]
-    result = compare(AlignInput(trace_paths=paths, **_nav_fields(data)))
+    result = compare(AlignInput(trace_paths=paths, **_nav_fields(data, ("include_pairs",))))
     if result.status == "FAILED":
-        raise _TaskFailed(result.error or result.message)
+        detail = result.error or ""
+        for path, ref in zip(paths, refs):
+            detail = detail.replace(path, ref)
+        raise _TaskFailed(f"{result.message} {detail}".strip())
 
     artifact = result.to_artifact()
     output: dict[str, Any] = {"summary": result.message, "mode": result.mode}
@@ -595,6 +672,8 @@ def _handle_trace_alignment(message: ExecutionMessage) -> dict[str, Any]:
             "delta": result.delta,
             "divergences": result.divergences,
         })
+        if result.pairs is not None:          # only when include_pairs was asked for
+            output["pairs"] = result.pairs
     else:
         output.update({
             "matrix": result.matrix,
@@ -635,7 +714,9 @@ def handle(message: ExecutionMessage) -> AgentReply:
     reply = AgentReply(
         workflow_id=message.workflow_id,
         step_id=message.step_id,
-        agent_id=message.agent_id or AGENT_ID,
+        # Always our own identifier, not an echo: the published reply schema
+        # requires "KIO2", and a caller that wrote "kio2" must still get a valid reply.
+        agent_id=AGENT_ID,
     )
 
     capability = (message.capability or "").strip()
@@ -658,6 +739,10 @@ def handle(message: ExecutionMessage) -> AgentReply:
 
     try:
         reply.output = handler(message)
+        ref = reply.output.get("trace_ref") if reply.output else None
+        if isinstance(ref, str) and ref.startswith(TRACE_REF_PREFIX):
+            # Relative to this service, so it holds whatever host KIO2 is reached at.
+            reply.output["trace_url"] = trace_url(ref)
     except (_TaskFailed, ValueError) as exc:
         reply.status, reply.error = "error", str(exc)
     except Exception as exc:  # noqa: BLE001 — a crash must not look like a broken service

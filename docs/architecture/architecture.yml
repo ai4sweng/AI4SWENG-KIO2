@@ -15,7 +15,7 @@ deployment:
   kind: containerised-http-service
   # No UI of its own: per D2.6 the KIO1 orchestrator owns the GUI/CLI and KIOs
   # are services behind it (NFR-KIO1-03, "scale horizontally across all KIO services").
-  port: 8013                          # KIO1 registers 8102 — run with KIO_PORT=8102
+  port: 8102                          # unified default — image, compose and a bare local run all use it
   env: [KIO_PORT, KIO_HOST, KIO2_TRACE_BUDGET, KIO2_TRACE_DIR]
   entrypoint: "uvicorn kio2.main:app"
   modes:
@@ -143,7 +143,7 @@ tasks:
 kio1_protocol:
   # kio1.orchestrator/docs/connecting-a-kio.md
   registered_port: 8102               # KIO1 config.json; scheme is KIO2 -> 8102, KIO10 -> 8110
-  local_default_port: 8013            # bare `python -m kio2.main` outside a container
+  local_default_port: 8102            # bare `python -m kio2.main` outside a container — same as the image
   request_fields: [workflow_id, step_id, agent_id, capability, endpoint, task, data]
   reply_fields: [workflow_id, step_id, agent_id, status, output, error]
   always_http_200: true               # a non-2xx means "the service is broken", not "the task failed"

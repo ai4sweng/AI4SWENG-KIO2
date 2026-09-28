@@ -92,7 +92,7 @@ no OpenTelemetry installed, all calls are no-ops.
 
 ```bash
 # standalone service (needs focustracer installed / on PYTHONPATH)
-python -m kio2.main            # serves on :8013
+python -m kio2.main            # serves on :8102
 
 # one-shot library demo
 python -c "from kio2 import localize; from kio2.dummy import dummy_input; print(localize(dummy_input()).message)"

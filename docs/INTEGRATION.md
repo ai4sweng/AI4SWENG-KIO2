@@ -28,9 +28,9 @@ where KIO1 owns the GUI/CLI.
 | Platform KIO shell | drop `src/kio2/` where the platform expects a shell | `make_app()` auto-detects `kio_base` and upgrades to NATS + HITL + capability announcements |
 | Python library | `from kio2 import localize, replay, compare` | tests, notebooks, another KIO in-process |
 
-Environment: `KIO_PORT` (**8102** in the image, `8013` for a bare local run),
-`KIO_HOST`, `KIO2_TRACE_BUDGET` (default `45` s), `KIO2_TRACE_DIR` (default: the
-system temp directory).
+Environment: `KIO_PORT` (default **8102** — the image, Compose, and a bare local
+run all agree), `KIO_HOST`, `KIO2_TRACE_BUDGET` (default `45` s), `KIO2_TRACE_DIR`
+(default: the system temp directory).
 
 > **Not yet verified:** the Docker image has never been built end to end (no
 > Docker daemon available during development). Build it once before relying on
@@ -92,8 +92,8 @@ Two changes from what is in KIO1's config today:
 follows the orchestrator's per-KIO scheme (KIO2 → 8102, KIO10 → 8110). The image
 listens there. The *host* part depends on the topology: `http://127.0.0.1:8102`
 for a single machine, `http://kio2:8102` where the service name resolves, e.g.
-under Compose. KIO2's bare local default remains `8013`; `KIO_PORT` selects any
-of them.
+under Compose. KIO2's bare local default is `8102` too now, matching the image;
+`KIO_PORT` overrides it for any topology.
 
 ### 3.2 What to send
 
@@ -440,9 +440,16 @@ no write access to shared volumes beyond the repo under analysis, and network
 egress restricted. This is a deployment decision, not something KIO2 can
 enforce for you.
 
-**The target code must be reachable inside the container.** Mount the repo under
-analysis as a volume and pass its in-container path as `working_directory`. The
-bundled dummy example is self-contained and needs no mount.
+**The target code must be reachable inside the container.** KIO2 runs inside
+its own container, so a host path (e.g. `E:\...\your-repo` or `/home/you/...`)
+means nothing to it — mount the repo under analysis as a volume and pass its
+**in-container** path as `target_script` / `working_directory`. The
+[`docker-compose.yml`](../docker-compose.yml) in this repo mounts
+`${KIO2_WORKSPACE:-./workspace}` (host) to `/workspace` (container, read-only);
+drop or symlink the code under `./workspace/` — or point `KIO2_WORKSPACE` at
+another folder via a local `.env` (see [`.env.example`](../.env.example)) —
+and reference it as `/workspace/...` in requests. The bundled dummy example is
+self-contained and needs no mount.
 
 **Traces are never deleted.** Each localization writes
 `<system temp>/kio2_<uuid>.xml` and returns the path, because the replay and
@@ -522,11 +529,11 @@ KIO2 requirements are revised.
 ## 9. Smoke test after deployment
 
 ```bash
-curl http://localhost:8013/health/
-curl http://localhost:8013/tasks
+curl http://localhost:8102/health/
+curl http://localhost:8102/tasks
 
 # bundled failing example — no mounted repo needed
-curl -XPOST http://localhost:8013/execute \
+curl -XPOST http://localhost:8102/execute \
   -H 'content-type: application/json' -d '{"payload":{}}'
 ```
 

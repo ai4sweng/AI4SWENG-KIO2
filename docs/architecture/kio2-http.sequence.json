@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "KIO1 calls KIO2: the HTTP exchange",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [
+      1080,
+      622
+    ]
+  },
+  "participants": [
+    {
+      "id": "kio1",
+      "type": "external",
+      "label": "KIO1",
+      "sublabel": "dispatcher"
+    },
+    {
+      "id": "service",
+      "type": "backend",
+      "label": "service.py",
+      "sublabel": "HTTP routes"
+    },
+    {
+      "id": "jobs",
+      "type": "messagebus",
+      "label": "jobs.py",
+      "sublabel": "job store"
+    },
+    {
+      "id": "adapter",
+      "type": "backend",
+      "label": "kio1.py",
+      "sublabel": "capability adapter"
+    },
+    {
+      "id": "traces",
+      "type": "database",
+      "label": "Trace dir",
+      "sublabel": "KIO2_TRACE_DIR"
+    }
+  ],
+  "segments": [
+    {
+      "from": 160,
+      "to": 226,
+      "label": "Submit"
+    },
+    {
+      "from": 236,
+      "to": 336,
+      "label": "Analyse in background"
+    },
+    {
+      "from": 346,
+      "to": 412,
+      "label": "Poll"
+    },
+    {
+      "from": 422,
+      "to": 522,
+      "label": "Reuse the trace"
+    }
+  ],
+  "messages": [
+    {
+      "id": "m-submit",
+      "from": "kio1",
+      "to": "service",
+      "y": 176,
+      "label": "POST /jobs",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m-ack",
+      "from": "service",
+      "to": "kio1",
+      "y": 210,
+      "label": "accepted, job_id",
+      "variant": "return"
+    },
+    {
+      "id": "m-handle",
+      "from": "jobs",
+      "to": "adapter",
+      "y": 252,
+      "label": "handle()",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m-record",
+      "from": "adapter",
+      "to": "traces",
+      "y": 286,
+      "label": "record, slice",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m-output",
+      "from": "adapter",
+      "to": "jobs",
+      "y": 320,
+      "label": "findings, trace_ref",
+      "variant": "return"
+    },
+    {
+      "id": "m-poll",
+      "from": "kio1",
+      "to": "service",
+      "y": 362,
+      "label": "GET /jobs/{job_id}",
+      "variant": "default"
+    },
+    {
+      "id": "m-final",
+      "from": "service",
+      "to": "kio1",
+      "y": 396,
+      "label": "success, artifacts",
+      "variant": "return"
+    },
+    {
+      "id": "m-follow",
+      "from": "kio1",
+      "to": "service",
+      "y": 438,
+      "label": "POST /jobs: replay",
+      "variant": "default"
+    },
+    {
+      "id": "m-read",
+      "from": "adapter",
+      "to": "traces",
+      "y": 472,
+      "label": "read XML",
+      "variant": "default"
+    },
+    {
+      "id": "m-follow-back",
+      "from": "service",
+      "to": "kio1",
+      "y": 506,
+      "label": "replay_view",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "service",
+      "from": 170,
+      "to": 218,
+      "type": "backend"
+    },
+    {
+      "participant": "jobs",
+      "from": 246,
+      "to": 328,
+      "type": "messagebus"
+    },
+    {
+      "participant": "adapter",
+      "from": 246,
+      "to": 328,
+      "type": "backend"
+    },
+    {
+      "participant": "service",
+      "from": 356,
+      "to": 404,
+      "type": "backend"
+    },
+    {
+      "participant": "service",
+      "from": 432,
+      "to": 514,
+      "type": "backend"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Sent by KIO1",
+      "items": [
+        "repository and entry_point as file:// URIs",
+        "a later step gets the trace from KIO1, as an artifact"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Returned by KIO2",
+      "items": [
+        "success: verdict, findings, crash_state, trace",
+        "failure: failure_class, e.g. entry_point_missing"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Open the trace",
+      "items": [
+        "GET /traces/{token} returns the recorded XML",
+        "Any browser can open it; only files in KIO2_TRACE_DIR are served"
+      ]
+    }
+  ]
+}

@@ -1,10 +1,10 @@
 # KIO2 — independent, headless API service (Bug Locate & Fix).
 # Builds a self-contained image: FocusTracer engine (from source) + the KIO2
-# service. Exposes the KIO contract on :8013 (POST /execute, GET /health/).
+# service. Exposes the KIO contract on :8102 (POST /execute, GET /health/).
 #
 #   docker build -t ai4sweng-kio2 .
-#   docker run -p 8013:8013 ai4sweng-kio2
-#   curl -XPOST localhost:8013/execute -H 'content-type: application/json' -d '{"payload":{}}'
+#   docker run -p 8102:8102 ai4sweng-kio2
+#   curl -XPOST localhost:8102/execute -H 'content-type: application/json' -d '{"payload":{}}'
 #
 FROM python:3.12-slim
 

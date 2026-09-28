@@ -237,29 +237,29 @@ inside the platform it is a full KIO shell (see §6).
 
 ```bash
 # health + capabilities
-curl http://localhost:8013/health/
-curl http://localhost:8013/tasks
+curl http://localhost:8102/health/
+curl http://localhost:8102/tasks
 
 # localize a specific target
-curl -XPOST http://localhost:8013/execute \
+curl -XPOST http://localhost:8102/execute \
   -H 'content-type: application/json' \
   -d '{"session_id":"s1","payload":{"target_script":"/work/app.py","working_directory":"/work","functions":["compute"]}}'
 
 # bare payload ⇒ bundled dummy example
-curl -XPOST http://localhost:8013/execute -H 'content-type: application/json' -d '{"payload":{}}'
+curl -XPOST http://localhost:8102/execute -H 'content-type: application/json' -d '{"payload":{}}'
 
 # replay: step into, from the crash, in the trace the localization produced
-curl -XPOST http://localhost:8013/execute \
+curl -XPOST http://localhost:8102/execute \
   -H 'content-type: application/json' \
   -d '{"payload":{"task_type":"replay","trace_path":"/tmp/kio2_x.xml","at_exception":true,"step_action":"out"}}'
 
 # alignment: compare two runs side by side at timeline index 3
-curl -XPOST http://localhost:8013/execute \
+curl -XPOST http://localhost:8102/execute \
   -H 'content-type: application/json' \
   -d '{"payload":{"task_type":"trace_alignment","trace_paths":["/tmp/a.xml","/tmp/b.xml"],"seq":3}}'
 
 # alignment: curate a set of runs (distance matrix + reference + outlier)
-curl -XPOST http://localhost:8013/execute \
+curl -XPOST http://localhost:8102/execute \
   -H 'content-type: application/json' \
   -d '{"payload":{"trace_paths":["/tmp/a.xml","/tmp/b.xml","/tmp/c.xml"]}}'
 ```
@@ -292,18 +292,24 @@ print(diff.distance, diff.delta)
 ```bash
 docker build -t ai4sweng-kio2 .
 docker run -p 8102:8102 ai4sweng-kio2
-# then: curl -XPOST localhost:8013/execute -H 'content-type: application/json' -d '{"payload":{}}'
+# then: curl -XPOST localhost:8102/execute -H 'content-type: application/json' -d '{"payload":{}}'
+
+# or, with a mount for the code you want to trace (see docker-compose.yml for the
+# equivalent, configurable via KIO2_WORKSPACE):
+docker run -p 8102:8102 -v "$(pwd)/workspace:/workspace:ro" ai4sweng-kio2
 ```
 
 The image installs FocusTracer from source (build arg `FOCUSTRACER_REF`, default
 `git+https://github.com/BitnetTR/focustracer.git@master`) then the KIO2 package. For
 offline builds, replace the git install with a `COPY` of a local FocusTracer
-checkout. Env: `KIO_PORT` (default 8013), `KIO_HOST`.
+checkout. Env: `KIO_PORT` (default 8102 — same for the image and a bare local run), `KIO_HOST`.
 
 > Note: the runner executes the target program to capture its trace, so the
-> **target code must be reachable inside the container** — mount the repo under
-> analysis as a volume, or pass a `working_directory` that exists in the image.
-> The bundled dummy example is self-contained and works out of the box.
+> **target code must be reachable inside the container** — a host path (e.g.
+> `E:\...\your-repo`) means nothing to it. Mount the repo under analysis as a
+> volume and pass its **in-container** path (e.g. `/workspace/...`) as
+> `target_script` / `working_directory` — see [`INTEGRATION.md`](INTEGRATION.md)
+> §6. The bundled dummy example is self-contained and works out of the box.
 
 ---
 

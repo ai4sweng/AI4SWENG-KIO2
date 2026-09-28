@@ -8,7 +8,7 @@ itself (D2.6 scope boundary).
 Layers (import the one you need):
 - ``contract``      — the input/output models for every task (interface)
 - ``runner``        — run a target under FocusTracer to get a trace
-- ``localizer``     — trace → slice → ranked suspect lines (FR-KIO2-05)
+- ``localizer``     — trace → slice → ranked suspect lines (FR-KIO2-07, FR-KIO2-05 in part)
 - ``replayer``      — post-mortem navigation over a recorded trace (FR-KIO2-02)
 - ``comparator``    — align traces / curate a trace set (FR-KIO2-03)
 - ``observability`` — optional OpenTelemetry spans/metrics (no-op if OTel absent)
