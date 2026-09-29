@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from kio2 import AlignInput, Kio2Input, ReplayInput, compare, localize, replay
-from kio2.kio1 import localization_output
+from kio2.kio1_protocol import localization_output
 from kio2.runner import run_trace
 
 OUT = {}

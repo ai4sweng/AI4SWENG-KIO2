@@ -12,7 +12,7 @@ first integration.
 
 **Why.** KIO2 executes the program under analysis, so its runtime is the target's
 runtime. Today that is bounded twice: KIO1 waits `dispatch.request_timeout`
-(60 s) and does not retry, and `kio1.py` caps recording at `KIO2_TRACE_BUDGET`
+(60 s) and does not retry, and `kio1_protocol.py` caps recording at `KIO2_TRACE_BUDGET`
 (45 s) so it can still answer. `runner.py` allows 180 s on KIO2's own contract,
 and a dispatched step cannot use it. Any repository whose reproduction takes
 longer than 45 s is reported as a *failure* while KIO2 is working correctly.

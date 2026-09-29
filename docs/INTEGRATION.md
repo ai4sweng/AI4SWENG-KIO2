@@ -63,7 +63,7 @@ real error, rather than falling through and quietly localising the dummy example
 ## 3. KIO1 dispatch protocol
 
 Matches `kio1.orchestrator/docs/connecting-a-kio.md`. Implemented in
-`src/kio2/kio1.py`, which is a pure translation layer — the domain modules know
+`src/kio2/kio1_protocol.py`, which is a pure translation layer — the domain modules know
 nothing about KIO1.
 
 ### 3.1 Registration

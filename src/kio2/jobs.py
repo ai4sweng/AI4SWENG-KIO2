@@ -10,9 +10,9 @@ applies unchanged to every agent it dispatches to:
               ... status: "failure"  + failure_class, diagnostics
 
 ``GET /jobs/{job_id}`` answers with the acknowledgement while the job runs, then
-with the final reply. Like :mod:`kio2.kio1`, this is a **pure adapter**: it
-translates the envelope into an :class:`~kio2.kio1.ExecutionMessage` and lets
-:func:`kio2.kio1.handle` do the work, so both contracts share one implementation.
+with the final reply. Like :mod:`kio2.kio1_protocol`, this is a **pure adapter**: it
+translates the envelope into an :class:`~kio2.kio1_protocol.ExecutionMessage` and lets
+:func:`kio2.kio1_protocol.handle` do the work, so both contracts share one implementation.
 
 Two things differ from the synchronous ``/execute`` envelope:
 
@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from . import kio1
+from . import kio1_protocol
 
 SCHEMA_VERSION = "1.0"
 
@@ -55,10 +55,10 @@ MAX_JOBS = int(os.environ.get("KIO2_MAX_JOBS", "500"))
 #: Artifact name per capability. A dependent step receives each artifact under
 #: this name in its ``data``.
 ARTIFACT_NAMES = {
-    kio1.CAP_BUG_LOCALIZATION: "fault_localization",
-    kio1.CAP_DIAGNOSIS: "diagnosis",
-    kio1.CAP_REPLAY: "replay_view",
-    kio1.CAP_TRACE_ALIGNMENT: "trace_comparison",
+    kio1_protocol.CAP_BUG_LOCALIZATION: "fault_localization",
+    kio1_protocol.CAP_DIAGNOSIS: "diagnosis",
+    kio1_protocol.CAP_REPLAY: "replay_view",
+    kio1_protocol.CAP_TRACE_ALIGNMENT: "trace_comparison",
 }
 
 #: The recording, published as its own artifact so that a later replay or
@@ -114,8 +114,8 @@ def _entry_relative_to(entry: str, root: str) -> str:
         return entry
 
 
-def execution_message(request: dict[str, Any]) -> kio1.ExecutionMessage:
-    """Translate a KIO1 job request into the message :func:`kio1.handle` answers.
+def execution_message(request: dict[str, Any]) -> kio1_protocol.ExecutionMessage:
+    """Translate a KIO1 job request into the message :func:`kio1_protocol.handle` answers.
 
     Reads from ``data``:
 
@@ -151,16 +151,16 @@ def execution_message(request: dict[str, Any]) -> kio1.ExecutionMessage:
         if name == "reference_trace":
             continue
         for uri in _ref_uris(value):
-            if uri.startswith(kio1.TRACE_REF_PREFIX) and uri not in traces:
+            if uri.startswith(kio1_protocol.TRACE_REF_PREFIX) and uri not in traces:
                 traces.append(uri)
     if traces and "trace_refs" not in data and "trace_ref" not in data:
         data["trace_refs"] = traces
 
     capability = str(request.get("capability") or "")
-    if capability == kio1.CAP_REPLAY and not any(k in data for k in _CURSOR_KEYS):
+    if capability == kio1_protocol.CAP_REPLAY and not any(k in data for k in _CURSOR_KEYS):
         data["at_exception"] = True
 
-    message = kio1.ExecutionMessage(
+    message = kio1_protocol.ExecutionMessage(
         workflow_id=str(request.get("workflow_id") or ""),
         step_id=str(request.get("step_id") or ""),
         capability=capability,
@@ -215,8 +215,8 @@ def failure_class(capability: str, error: str) -> str:
     return "analysis_failed"
 
 
-def final_reply(request: dict[str, Any], job_id: str, reply: kio1.AgentReply) -> dict[str, Any]:
-    """The KIO1 final reply for a finished :func:`kio1.handle` call.
+def final_reply(request: dict[str, Any], job_id: str, reply: kio1_protocol.AgentReply) -> dict[str, Any]:
+    """The KIO1 final reply for a finished :func:`kio1_protocol.handle` call.
 
     On success the capability's output becomes one artifact, and the recording
     a second one (``trace``) whenever the output names one. The output is also
@@ -232,7 +232,7 @@ def final_reply(request: dict[str, Any], job_id: str, reply: kio1.AgentReply) ->
             # The adapter's text names the /execute fields; a job caller sends references.
             message = ("no entry point in the request: pass data.repository and "
                        "data.entry_point as file:// references (" + message + ")")
-        out["diagnostics"] = {"agent_id": kio1.AGENT_ID, "message": message}
+        out["diagnostics"] = {"agent_id": kio1_protocol.AGENT_ID, "message": message}
         return out
 
     output = reply.output or {}
@@ -244,7 +244,7 @@ def final_reply(request: dict[str, Any], job_id: str, reply: kio1.AgentReply) ->
         }
     }
     trace_ref = output.get("trace_ref")
-    if isinstance(trace_ref, str) and trace_ref.startswith(kio1.TRACE_REF_PREFIX):
+    if isinstance(trace_ref, str) and trace_ref.startswith(kio1_protocol.TRACE_REF_PREFIX):
         artifacts[TRACE_ARTIFACT] = {
             "schema_id": TRACE_SCHEMA_ID,
             "receipt": {"uri": trace_ref, "version": 1},
@@ -322,9 +322,9 @@ class JobStore:
             message = execution_message(job.request)
             with task_span(f"kio1.jobs.{message.capability or 'unknown'}",
                            message.workflow_id, message.step_id):
-                reply = await asyncio.to_thread(kio1.handle, message)
+                reply = await asyncio.to_thread(kio1_protocol.handle, message)
         except Exception as exc:  # noqa: BLE001 — a job must always settle
-            reply = kio1.AgentReply(status="error", error=f"{type(exc).__name__}: {exc}")
+            reply = kio1_protocol.AgentReply(status="error", error=f"{type(exc).__name__}: {exc}")
         job.final = final_reply(job.request, job.job_id, reply)
 
     def _evict(self) -> None:

@@ -25,7 +25,7 @@ def _load_dotenv(path: Path) -> None:
             os.environ.setdefault(key.strip(), value.strip().strip("'\""))
 
 
-# Before importing the service: kio2.kio1 reads KIO2_TRACE_DIR at import time.
+# Before importing the service: kio2.kio1_protocol reads KIO2_TRACE_DIR at import time.
 _load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 import uvicorn  # noqa: E402

@@ -17,7 +17,7 @@ successful with no output.
 
 import pytest
 
-from kio2 import kio1
+from kio2 import kio1_protocol
 from kio2.service import make_app
 
 testclient = pytest.importorskip("fastapi.testclient")
@@ -94,7 +94,7 @@ def message(capability, repo=None, **data):
 
 
 def test_reply_echoes_the_step_identifiers(client, repo):
-    body = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()
+    body = client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)).json()
     assert body["workflow_id"] == "wf-bug-pay01"
     assert body["step_id"] == "s2"
     assert body["agent_id"] == "KIO2"
@@ -103,14 +103,14 @@ def test_reply_echoes_the_step_identifiers(client, repo):
 
 def test_status_is_always_explicit(client, repo):
     """KIO1 treats a missing status as success, so it must never be omitted."""
-    for msg in (message(kio1.CAP_BUG_LOCALIZATION, repo), message("nonsense")):
+    for msg in (message(kio1_protocol.CAP_BUG_LOCALIZATION, repo), message("nonsense")):
         body = client.post("/execute", json=msg).json()
         assert body["status"] in ("ok", "error")
 
 
 def test_a_failed_task_is_still_http_200(client):
     """`status: error` inside a 200 — not a 4xx/5xx, which means "service broken"."""
-    response = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION))
+    response = client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION))
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "error"
@@ -128,7 +128,7 @@ def test_a_message_without_a_capability_is_an_error_not_a_dummy_run(client):
 def test_unknown_capability_lists_what_kio2_answers(client):
     body = client.post("/execute", json=message("time_travel")).json()
     assert body["status"] == "error"
-    assert kio1.CAP_BUG_LOCALIZATION in body["error"]
+    assert kio1_protocol.CAP_BUG_LOCALIZATION in body["error"]
 
 
 # ── bug_localization ────────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ def test_unknown_capability_lists_what_kio2_answers(client):
 
 def test_bug_localization_returns_summary_and_findings(client, repo):
     """The shape KIO1's own reference stub returns, so its prompt/UI fit."""
-    out = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()["output"]
+    out = client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)).json()["output"]
     assert out["summary"]
     assert out["findings"]
     top = out["findings"][0]
@@ -148,7 +148,7 @@ def test_bug_localization_returns_summary_and_findings(client, repo):
 
 
 def test_bug_localization_carries_the_recorded_values(client, repo):
-    out = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()["output"]
+    out = client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)).json()["output"]
     assert out["crash_state"]["tier"] == "'bronze'"
     assert out["criterion"].startswith("exception@")
     assert out["hitl_required"] is False
@@ -156,7 +156,7 @@ def test_bug_localization_carries_the_recorded_values(client, repo):
 
 def test_findings_never_leak_container_paths(client, repo):
     """Absolute paths from inside KIO2's container are meaningless to KIO1."""
-    out = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()["output"]
+    out = client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)).json()["output"]
     assert str(repo) not in out["summary"]
     assert all(not f["file"].startswith(str(repo)) for f in out["findings"])
 
@@ -165,7 +165,7 @@ def test_findings_never_leak_container_paths(client, repo):
 
 
 def test_diagnosis_states_the_causal_chain(client, repo):
-    out = client.post("/execute", json=message(kio1.CAP_DIAGNOSIS, repo)).json()["output"]
+    out = client.post("/execute", json=message(kio1_protocol.CAP_DIAGNOSIS, repo)).json()["output"]
     assert "discounted" in out["root_cause"]
     assert "tier='bronze'" in out["root_cause"].replace("tier = 'bronze'", "tier='bronze'")
     assert out["compared_runs"] == 1
@@ -184,7 +184,7 @@ def test_diagnosis_with_a_reference_run_reports_the_difference(client, repo):
     finally:
         os.environ.pop("TIER", None)
 
-    msg = message(kio1.CAP_DIAGNOSIS, repo, reference={"trace_ref": kio1.make_trace_ref(passing)})
+    msg = message(kio1_protocol.CAP_DIAGNOSIS, repo, reference={"trace_ref": kio1_protocol.make_trace_ref(passing)})
     out = client.post("/execute", json=msg).json()["output"]
     assert out["compared_runs"] == 2
     assert any(e["kind"] in ("divergence", "value_difference") for e in out["evidence"])
@@ -195,12 +195,12 @@ def test_diagnosis_with_a_reference_run_reports_the_difference(client, repo):
 
 def test_replay_follows_a_trace_ref_from_an_earlier_step(client, repo):
     """The hand-off KIO1 makes: one step's output becomes the next step's data."""
-    first = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()
+    first = client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)).json()
     ref = first["output"]["trace_ref"]
-    assert ref.startswith(kio1.TRACE_REF_PREFIX)
+    assert ref.startswith(kio1_protocol.TRACE_REF_PREFIX)
 
     body = client.post("/execute", json=message(
-        kio1.CAP_REPLAY, trace_ref=ref, at_exception=True, step_action="out",
+        kio1_protocol.CAP_REPLAY, trace_ref=ref, at_exception=True, step_action="out",
     )).json()
     assert body["status"] == "ok"
     assert body["output"]["current"]["state"]
@@ -208,24 +208,24 @@ def test_replay_follows_a_trace_ref_from_an_earlier_step(client, repo):
 
 
 def test_replay_accepts_a_ref_inherited_from_upstream(client, repo):
-    first = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()
-    msg = message(kio1.CAP_REPLAY, upstream={"s2": first["output"]})
+    first = client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)).json()
+    msg = message(kio1_protocol.CAP_REPLAY, upstream={"s2": first["output"]})
     body = client.post("/execute", json=msg).json()
     assert body["status"] == "ok", body["error"]
     assert body["output"]["cursor"] == 0
 
 
 def test_replay_without_a_trace_says_what_to_send(client):
-    body = client.post("/execute", json=message(kio1.CAP_REPLAY)).json()
+    body = client.post("/execute", json=message(kio1_protocol.CAP_REPLAY)).json()
     assert body["status"] == "error"
     assert "trace_ref" in body["error"]
 
 
 def test_trace_alignment_compares_two_runs(client, repo):
-    first = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()
+    first = client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)).json()
     ref = first["output"]["trace_ref"]
     body = client.post("/execute", json=message(
-        kio1.CAP_TRACE_ALIGNMENT, trace_refs=[ref, ref],
+        kio1_protocol.CAP_TRACE_ALIGNMENT, trace_refs=[ref, ref],
     )).json()
     assert body["status"] == "ok", body["error"]
     assert body["output"]["mode"] == "pair"
@@ -233,9 +233,9 @@ def test_trace_alignment_compares_two_runs(client, repo):
 
 
 def test_trace_alignment_needs_two_traces(client, repo):
-    first = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()
+    first = client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)).json()
     body = client.post("/execute", json=message(
-        kio1.CAP_TRACE_ALIGNMENT, trace_refs=[first["output"]["trace_ref"]],
+        kio1_protocol.CAP_TRACE_ALIGNMENT, trace_refs=[first["output"]["trace_ref"]],
     )).json()
     assert body["status"] == "error"
     assert "at least two" in body["error"]
@@ -246,18 +246,18 @@ def test_trace_alignment_needs_two_traces(client, repo):
 
 def test_fix_recommendation_is_refused_with_an_actionable_reason(client, repo):
     """KIO1's config asks KIO2 for this; D2.6 UC-UC1-03 makes it KIO7's step."""
-    body = client.post("/execute", json=message(kio1.CAP_FIX_RECOMMENDATION, repo)).json()
+    body = client.post("/execute", json=message(kio1_protocol.CAP_FIX_RECOMMENDATION, repo)).json()
     assert body["status"] == "error"
     assert "KIO7" in body["error"]
-    assert kio1.CAP_DIAGNOSIS in body["error"]
+    assert kio1_protocol.CAP_DIAGNOSIS in body["error"]
 
 
 def test_declared_capabilities_exclude_the_unsupported_one(client):
     body = client.get("/tasks").json()
     assert body["agent_id"] == "KIO2"
-    assert kio1.CAP_FIX_RECOMMENDATION not in body["capabilities"]
-    assert kio1.CAP_FIX_RECOMMENDATION in body["unsupported_capabilities"]
-    assert set(body["capabilities"]) == set(kio1.CAPABILITIES)
+    assert kio1_protocol.CAP_FIX_RECOMMENDATION not in body["capabilities"]
+    assert kio1_protocol.CAP_FIX_RECOMMENDATION in body["unsupported_capabilities"]
+    assert set(body["capabilities"]) == set(kio1_protocol.CAPABILITIES)
 
 
 # ── trace references ────────────────────────────────────────────────────────
@@ -266,23 +266,23 @@ def test_declared_capabilities_exclude_the_unsupported_one(client):
 def test_trace_ref_round_trips(tmp_path):
     trace = tmp_path / "t.xml"
     trace.write_text("<trace/>", encoding="utf-8")
-    assert kio1.resolve_trace_ref(kio1.make_trace_ref(str(trace))) == str(trace.resolve())
+    assert kio1_protocol.resolve_trace_ref(kio1_protocol.make_trace_ref(str(trace))) == str(trace.resolve())
 
 
 def test_trace_ref_outside_the_trace_directory_is_refused():
     """The adapter is the network edge: no reading arbitrary files off disk."""
     with pytest.raises(ValueError, match="outside the trace directory"):
-        kio1.resolve_trace_ref(kio1.make_trace_ref("/etc/passwd"))
+        kio1_protocol.resolve_trace_ref(kio1_protocol.make_trace_ref("/etc/passwd"))
 
 
 def test_malformed_trace_ref_is_rejected():
     with pytest.raises(ValueError):
-        kio1.resolve_trace_ref(kio1.TRACE_REF_PREFIX + "!!!not-base64!!!")
+        kio1_protocol.resolve_trace_ref(kio1_protocol.TRACE_REF_PREFIX + "!!!not-base64!!!")
 
 
 def test_a_refused_ref_becomes_a_task_error_not_a_crash(client):
     body = client.post("/execute", json=message(
-        kio1.CAP_REPLAY, trace_ref=kio1.make_trace_ref("/etc/passwd"),
+        kio1_protocol.CAP_REPLAY, trace_ref=kio1_protocol.make_trace_ref("/etc/passwd"),
     )).json()
     assert body["status"] == "error"
     assert body["output"] is None
@@ -293,12 +293,12 @@ def test_a_refused_ref_becomes_a_task_error_not_a_crash(client):
 
 def test_localization_stays_inside_kio1s_dispatch_window():
     """KIO1 waits 60 s and does not retry, so recording must finish sooner."""
-    assert kio1.TRACE_BUDGET_SECONDS < 60
-    inp = kio1.localization_input(kio1.ExecutionMessage(
-        capability=kio1.CAP_BUG_LOCALIZATION,
+    assert kio1_protocol.TRACE_BUDGET_SECONDS < 60
+    inp = kio1_protocol.localization_input(kio1_protocol.ExecutionMessage(
+        capability=kio1_protocol.CAP_BUG_LOCALIZATION,
         data={"target": {"entry_point": "main.py"}, "repository": {"path": "/work"}},
     ))
-    assert inp.trace_timeout == kio1.TRACE_BUDGET_SECONDS
+    assert inp.trace_timeout == kio1_protocol.TRACE_BUDGET_SECONDS
 
 
 # ── the other envelope still works ──────────────────────────────────────────
@@ -352,7 +352,7 @@ def test_a_clean_run_is_a_successful_answer(client, healthy_repo):
     which will usually run fine. Reporting that as an error would fail every step.
     """
     body = client.post("/execute", json=message(
-        kio1.CAP_BUG_LOCALIZATION,
+        kio1_protocol.CAP_BUG_LOCALIZATION,
         repository={"path": str(healthy_repo)}, target={"entry_point": "app.py"},
     )).json()
     assert body["status"] == "ok", body["error"]
@@ -362,13 +362,13 @@ def test_a_clean_run_is_a_successful_answer(client, healthy_repo):
 
 
 def test_a_crashing_run_still_reports_a_defect(client, repo):
-    body = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()
+    body = client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)).json()
     assert body["output"]["defect_found"] is True
 
 
 def test_diagnosis_of_a_clean_run_attributes_nothing(client, healthy_repo):
     out = client.post("/execute", json=message(
-        kio1.CAP_DIAGNOSIS,
+        kio1_protocol.CAP_DIAGNOSIS,
         repository={"path": str(healthy_repo)}, target={"entry_point": "app.py"},
     )).json()["output"]
     assert out["defect_found"] is False
@@ -378,7 +378,7 @@ def test_diagnosis_of_a_clean_run_attributes_nothing(client, healthy_repo):
 def test_document_field_names_are_accepted(client, repo):
     """`source_location` / `bug_report` — the integration document's vocabulary."""
     body = client.post("/execute", json=message(
-        kio1.CAP_BUG_LOCALIZATION,
+        kio1_protocol.CAP_BUG_LOCALIZATION,
         source_artifact="fastapi-shift-service",
         source_location=str(repo),
         entrypoint="main.py",
@@ -391,9 +391,9 @@ def test_document_field_names_are_accepted(client, repo):
 
 def test_execution_trace_field_feeds_replay(client, repo):
     """The document lists `execution_trace` as an input; it is a trace reference."""
-    first = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()
+    first = client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)).json()
     body = client.post("/execute", json=message(
-        kio1.CAP_REPLAY, execution_trace=first["output"]["trace_ref"], at_exception=True,
+        kio1_protocol.CAP_REPLAY, execution_trace=first["output"]["trace_ref"], at_exception=True,
     )).json()
     assert body["status"] == "ok", body["error"]
     assert body["output"]["current"]["state"]
@@ -402,7 +402,7 @@ def test_execution_trace_field_feeds_replay(client, repo):
 def test_an_artifact_name_alone_is_not_enough(client):
     """The document's placeholder message cannot be fulfilled — say why, clearly."""
     body = client.post("/execute", json=message(
-        kio1.CAP_BUG_LOCALIZATION,
+        kio1_protocol.CAP_BUG_LOCALIZATION,
         source_artifact="fastapi-shift-service", source_location="...",
         execution_trace=None, bug_report=None,
     )).json()
@@ -417,7 +417,7 @@ jsonschema = pytest.importorskip("jsonschema")
 
 @pytest.fixture(scope="module")
 def response_schema():
-    return kio1.load_schema("response")
+    return kio1_protocol.load_schema("response")
 
 
 def _validates(instance, schema):
@@ -427,15 +427,15 @@ def _validates(instance, schema):
 
 
 def test_published_schemas_are_valid_json_schema():
-    for name in kio1.SCHEMAS:
-        schema = kio1.load_schema(name)
+    for name in kio1_protocol.SCHEMAS:
+        schema = kio1_protocol.load_schema(name)
         jsonschema.Draft202012Validator.check_schema(schema)
         assert schema["$id"].endswith(f"kio2.{name}.schema.json")
 
 
 def test_schemas_are_served_over_http(client):
     body = client.get("/schema").json()
-    assert set(body) == set(kio1.SCHEMAS)
+    assert set(body) == set(kio1_protocol.SCHEMAS)
     assert client.get("/schema", params={"name": "response"}).json()["title"] == "KIO2 reply"
     assert client.get("/schema", params={"name": "nope"}).status_code == 404
     assert client.get("/tasks").json()["schema_url"] == "/schema"
@@ -445,19 +445,19 @@ def test_every_capability_reply_matches_the_published_schema(
     client, repo, healthy_repo, response_schema
 ):
     """The schema is a contract, not documentation: real replies are checked."""
-    localized = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()
+    localized = client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)).json()
     ref = localized["output"]["trace_ref"]
     replies = [
         localized,
-        client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION,
+        client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION,
                                              repository={"path": str(healthy_repo)},
                                              target={"entry_point": "app.py"})).json(),
-        client.post("/execute", json=message(kio1.CAP_DIAGNOSIS, repo)).json(),
-        client.post("/execute", json=message(kio1.CAP_REPLAY, trace_ref=ref,
+        client.post("/execute", json=message(kio1_protocol.CAP_DIAGNOSIS, repo)).json(),
+        client.post("/execute", json=message(kio1_protocol.CAP_REPLAY, trace_ref=ref,
                                              at_exception=True)).json(),
-        client.post("/execute", json=message(kio1.CAP_TRACE_ALIGNMENT,
+        client.post("/execute", json=message(kio1_protocol.CAP_TRACE_ALIGNMENT,
                                              trace_refs=[ref, ref])).json(),
-        client.post("/execute", json=message(kio1.CAP_FIX_RECOMMENDATION)).json(),  # error path
+        client.post("/execute", json=message(kio1_protocol.CAP_FIX_RECOMMENDATION)).json(),  # error path
         client.post("/execute", json=message("time_travel")).json(),
     ]
     for reply in replies:
@@ -466,7 +466,7 @@ def test_every_capability_reply_matches_the_published_schema(
 
 def test_the_documents_own_message_validates_against_the_request_schema():
     """The message shape published in the integration document is well formed."""
-    request_schema = kio1.load_schema("request")
+    request_schema = kio1_protocol.load_schema("request")
     jsonschema.validate(
         instance={
             "workflow_id": "wf-fastapi-shifts-001",
@@ -493,7 +493,7 @@ def test_request_schema_flags_a_localization_without_an_entry_point():
         jsonschema.validate(
             instance={"capability": "bug_localization",
                       "data": {"source_artifact": "svc", "source_location": "..."}},
-            schema=kio1.load_schema("request"),
+            schema=kio1_protocol.load_schema("request"),
         )
 
 
@@ -501,21 +501,21 @@ def test_request_schema_flags_a_localization_without_an_entry_point():
 
 
 def test_verdict_is_defect_when_statements_are_implicated(client, repo):
-    out = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()["output"]
+    out = client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)).json()["output"]
     assert out["verdict"] == "defect"
     assert out["defect_found"] is True
 
 
 def test_verdict_is_clean_for_a_healthy_program(client, healthy_repo):
     out = client.post("/execute", json=message(
-        kio1.CAP_BUG_LOCALIZATION,
+        kio1_protocol.CAP_BUG_LOCALIZATION,
         repository={"path": str(healthy_repo)}, target={"entry_point": "app.py"},
     )).json()["output"]
     assert out["verdict"] == "clean"
 
 
 def test_diagnosis_carries_the_same_verdict(client, repo):
-    out = client.post("/execute", json=message(kio1.CAP_DIAGNOSIS, repo)).json()["output"]
+    out = client.post("/execute", json=message(kio1_protocol.CAP_DIAGNOSIS, repo)).json()["output"]
     assert out["verdict"] == "defect"
 
 
@@ -523,43 +523,43 @@ def test_diagnosis_carries_the_same_verdict(client, repo):
 
 
 def test_agent_id_is_always_kio2_even_when_addressed_in_lower_case(client, repo):
-    msg = message(kio1.CAP_BUG_LOCALIZATION, repo)
+    msg = message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)
     msg["agent_id"] = "kio2"
     body = client.post("/execute", json=msg).json()
     assert body["agent_id"] == "KIO2"
 
 
 def test_criterion_is_relative_to_the_repository_root(client, repo):
-    out = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()["output"]
+    out = client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)).json()["output"]
     assert out["criterion"].startswith("exception@shop/pricing.py:")
     assert str(repo) not in out["criterion"]
 
 
 def test_diagnosis_summary_has_the_same_form_as_localization(client, repo):
-    loc = client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()["output"]
-    dia = client.post("/execute", json=message(kio1.CAP_DIAGNOSIS, repo)).json()["output"]
+    loc = client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)).json()["output"]
+    dia = client.post("/execute", json=message(kio1_protocol.CAP_DIAGNOSIS, repo)).json()["output"]
     assert dia["summary"] == loc["summary"]
 
 
 def _ref(client, repo):
-    return client.post("/execute", json=message(kio1.CAP_BUG_LOCALIZATION, repo)).json()["output"]["trace_ref"]
+    return client.post("/execute", json=message(kio1_protocol.CAP_BUG_LOCALIZATION, repo)).json()["output"]["trace_ref"]
 
 
 def test_replay_reports_relative_paths(client, repo):
     ref = _ref(client, repo)
     out = client.post("/execute", json=message(
-        kio1.CAP_REPLAY, trace_ref=ref, at_exception=True,
+        kio1_protocol.CAP_REPLAY, trace_ref=ref, at_exception=True,
         repository={"path": str(repo)})).json()["output"]
     assert out["current"]["file"] == "shop/pricing.py"
     # without a root the bare file name is reported, never the container path
-    out = client.post("/execute", json=message(kio1.CAP_REPLAY, trace_ref=ref, at_exception=True)).json()["output"]
+    out = client.post("/execute", json=message(kio1_protocol.CAP_REPLAY, trace_ref=ref, at_exception=True)).json()["output"]
     assert out["current"]["file"] == "pricing.py"
 
 
 def test_replay_passes_def_var_on(client, repo):
     ref = _ref(client, repo)
     out = client.post("/execute", json=message(
-        kio1.CAP_REPLAY, trace_ref=ref, at_exception=True, def_var="tier")).json()["output"]
+        kio1_protocol.CAP_REPLAY, trace_ref=ref, at_exception=True, def_var="tier")).json()["output"]
     assert out["def_of"] is not None
     assert out["def_of"]["name"] == "tier"
 
@@ -567,15 +567,15 @@ def test_replay_passes_def_var_on(client, repo):
 def test_trace_alignment_passes_include_pairs_on(client, repo):
     ref = _ref(client, repo)
     out = client.post("/execute", json=message(
-        kio1.CAP_TRACE_ALIGNMENT, trace_refs=[ref, ref], include_pairs=True)).json()["output"]
+        kio1_protocol.CAP_TRACE_ALIGNMENT, trace_refs=[ref, ref], include_pairs=True)).json()["output"]
     assert out["pairs"]
     plain = client.post("/execute", json=message(
-        kio1.CAP_TRACE_ALIGNMENT, trace_refs=[ref, ref])).json()["output"]
+        kio1_protocol.CAP_TRACE_ALIGNMENT, trace_refs=[ref, ref])).json()["output"]
     assert "pairs" not in plain
 
 
 def test_upstream_repository_path_is_read(client, repo):
-    msg = message(kio1.CAP_BUG_LOCALIZATION,
+    msg = message(kio1_protocol.CAP_BUG_LOCALIZATION,
                   upstream={"s6": {"target": {"entry_point": "main.py"},
                                    "repository": {"path": str(repo)}}})
     body = client.post("/execute", json=msg).json()
@@ -584,12 +584,12 @@ def test_upstream_repository_path_is_read(client, repo):
 
 
 def test_trace_errors_do_not_disclose_the_trace_directory(client):
-    ref = kio1.make_trace_ref(str(kio1.TRACE_ROOT / "missing.xml"))
-    body = client.post("/execute", json=message(kio1.CAP_REPLAY, trace_ref=ref)).json()
+    ref = kio1_protocol.make_trace_ref(str(kio1_protocol.TRACE_ROOT / "missing.xml"))
+    body = client.post("/execute", json=message(kio1_protocol.CAP_REPLAY, trace_ref=ref)).json()
     assert body["status"] == "error"
-    assert str(kio1.TRACE_ROOT) not in body["error"]
-    outside = client.post("/execute", json=message(kio1.CAP_REPLAY, trace_ref="/etc/passwd")).json()
-    assert str(kio1.TRACE_ROOT) not in outside["error"]
+    assert str(kio1_protocol.TRACE_ROOT) not in body["error"]
+    outside = client.post("/execute", json=message(kio1_protocol.CAP_REPLAY, trace_ref="/etc/passwd")).json()
+    assert str(kio1_protocol.TRACE_ROOT) not in outside["error"]
 
 
 def test_tasks_publishes_the_language_scope(client):

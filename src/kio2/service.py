@@ -28,7 +28,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from . import jobs, kio1
+from . import jobs, kio1_protocol
 from .comparator import compare
 from .contract import AlignInput, FaultLocalization, Kio2Input, ReplayInput
 from .localizer import localize
@@ -159,11 +159,11 @@ async def kio1_handler(body: dict[str, Any]) -> dict[str, Any]:
     other. The work runs in a worker thread because KIO1 may dispatch several
     steps to KIO2 at the same time, and each localization executes a program.
     """
-    message = kio1.ExecutionMessage(**{
-        k: v for k, v in body.items() if k in _known_fields(kio1.ExecutionMessage)
+    message = kio1_protocol.ExecutionMessage(**{
+        k: v for k, v in body.items() if k in _known_fields(kio1_protocol.ExecutionMessage)
     })
     with task_span(f"kio1.{message.capability or 'unknown'}", message.workflow_id, message.step_id):
-        reply = await asyncio.to_thread(kio1.handle, message)
+        reply = await asyncio.to_thread(kio1_protocol.handle, message)
     return reply.model_dump() if hasattr(reply, "model_dump") else reply.dict()
 
 
@@ -280,7 +280,7 @@ def _standalone_app(kio_id: str, title: str):
         return {
             # `agent_id` + `status` is what KIO1's liveness probe reads; the rest
             # is KIO2's own health detail.
-            "agent_id": kio1.AGENT_ID,
+            "agent_id": kio1_protocol.AGENT_ID,
             "status": "ok",
             "service": kio_id,
             "title": title,
@@ -299,10 +299,10 @@ def _standalone_app(kio_id: str, title: str):
         """Capability discovery, in both vocabularies."""
         return {
             "service": kio_id,
-            "agent_id": kio1.AGENT_ID,
+            "agent_id": kio1_protocol.AGENT_ID,
             "supported_tasks": _SUPPORTED_TASKS,        # KIO2's own contract
-            "capabilities": kio1.CAPABILITIES,          # register these in KIO1's config.json
-            "unsupported_capabilities": sorted(kio1.UNSUPPORTED_CAPABILITIES),
+            "capabilities": kio1_protocol.CAPABILITIES,          # register these in KIO1's config.json
+            "unsupported_capabilities": sorted(kio1_protocol.UNSUPPORTED_CAPABILITIES),
             # FR-KIO2-01: the PoC traces Python only; publishing it lets a caller
             # (e.g. a UC3 C++/HLS step) see the mismatch at integration time.
             "languages": ["python"],
@@ -325,9 +325,9 @@ def _standalone_app(kio_id: str, title: str):
         """
         from fastapi import HTTPException
         if name is None:
-            return kio1.all_schemas()
+            return kio1_protocol.all_schemas()
         try:
-            return kio1.load_schema(name)
+            return kio1_protocol.load_schema(name)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -339,7 +339,7 @@ def _standalone_app(kio_id: str, title: str):
         is treated as KIO2's own `{session_id, payload}` contract. Detection is by
         body shape, so neither caller needs to know about the other.
         """
-        if kio1.is_kio1_message(body):
+        if kio1_protocol.is_kio1_message(body):
             return await kio1_handler(body)
 
         request = JobRequest(**{k: v for k, v in body.items() if k in _known_fields(JobRequest)})
@@ -362,7 +362,7 @@ def _standalone_app(kio_id: str, title: str):
         """
         from fastapi import HTTPException, Response
         try:
-            path = kio1.resolve_trace_ref(kio1.TRACE_REF_PREFIX + token)
+            path = kio1_protocol.resolve_trace_ref(kio1_protocol.TRACE_REF_PREFIX + token)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return Response(content=Path(path).read_bytes(), media_type="application/xml")

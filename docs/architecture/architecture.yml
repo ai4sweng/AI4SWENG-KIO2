@@ -83,7 +83,7 @@ components:
     platform_independent: true
     reads_only: true
 
-  - module: kio1.py
+  - module: kio1_protocol.py
     role: "KIO1 dispatch-protocol adapter — envelope translation and capability mapping"
     depends_on: [contract, localizer, replayer, comparator]
     platform_independent: false          # adapter layer

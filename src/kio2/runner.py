@@ -27,7 +27,7 @@ def trace_dir() -> Path:
     """Where recordings are written: ``KIO2_TRACE_DIR``, else the system temp directory.
 
     The same directory is the only one a trace reference may resolve into
-    (``kio2.kio1.TRACE_ROOT``), so writing anywhere else would make every
+    (``kio2.kio1_protocol.TRACE_ROOT``), so writing anywhere else would make every
     recording unreachable to replay and alignment.
     """
     path = Path(os.environ.get("KIO2_TRACE_DIR") or tempfile.gettempdir()).resolve()

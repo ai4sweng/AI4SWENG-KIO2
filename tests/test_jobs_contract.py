@@ -13,12 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from kio2 import jobs, kio1
+from kio2 import jobs, kio1_protocol
 from kio2.service import make_app
 
 testclient = pytest.importorskip("fastapi.testclient")
 
-EXAMPLES = Path(kio1.__file__).parent / "examples"
+EXAMPLES = Path(kio1_protocol.__file__).parent / "examples"
 JOB_ID = re.compile(r"^[A-Za-z0-9._:-]+$")          # KIO1's check on job ids
 
 
@@ -95,7 +95,7 @@ def test_replay_opens_at_the_failure_when_no_cursor_is_given():
 
 
 def test_a_request_body_cannot_raise_the_recording_budget():
-    message = kio1.ExecutionMessage(**{"capability": "bug_localization", "_trace_budget": 9999})
+    message = kio1_protocol.ExecutionMessage(**{"capability": "bug_localization", "_trace_budget": 9999})
     assert message._trace_budget is None
 
 

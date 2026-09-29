@@ -81,7 +81,7 @@ right reads the recorded trace: `localizer.py` slices it (FR-KIO2-05),
 | `replayer.py` | **core**: post-mortem navigation over a recorded trace | 02 | yes |
 | `comparator.py` | **core**: align traces / curate a trace set | 03 | yes |
 | `observability.py` | optional OpenTelemetry spans/metrics (no-op if OTel absent) | — | yes |
-| `kio1.py` | KIO1 dispatch-protocol adapter (envelope translation, capability mapping, `trace_ref`) | — | adapter |
+| `kio1_protocol.py` | KIO1 dispatch-protocol adapter (envelope translation, capability mapping, `trace_ref`) | — | adapter |
 | `service.py` | KIO handler + `make_app` (platform shell **or** standalone FastAPI) | — | adapter |
 | `dummy.py` + `examples/` | bundled failing example for standalone runs | — | yes |
 | `main.py` | service entrypoint (`uvicorn kio2.main:app`) | — | adapter |
