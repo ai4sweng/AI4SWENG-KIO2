@@ -357,11 +357,10 @@
 </div>
 
 <h2 id="run">Run it</h2>
-<p>Install the FocusTracer engine and KIO2, then start the service on port 8102:</p>
-<pre><code>pip install -e ../../Trace/focustracer
-pip install -e .
-cd src
+<p>One command installs KIO2 and the FocusTracer engine (Python 3.10 or later). Then start the service on port 8102:</p>
+<pre><code>pip install "ai4sweng-kio2 @ git+https://github.com/ai4sweng/AI4SWENG-KIO2.git"
 python -m kio2.main</code></pre>
+<p>Open <code>http://127.0.0.1:8102/docs</code> to try every endpoint with ready-to-run examples.</p>
 <p>Or with Docker. Put the code to analyse under <code>./workspace</code> and refer to it as <code>/workspace/...</code>:</p>
 <pre><code>docker compose up --build</code></pre>
 <p>Settings are read from <code>.env</code> (see <code>.env.example</code>), for example <code>KIO2_TRACE_DIR</code> for where traces are written.</p>

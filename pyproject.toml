@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai4sweng-kio2"
-version = "1.0.6"
+version = "1.3.0"
 description = "AI4SWENG KIO2 — Bug Locate & Fix: Reverse Execution & Dynamic Slicing (BitNet)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,12 +12,10 @@ license = { text = "Proprietary" }
 authors = [{ name = "BitNet" }]
 
 dependencies = [
-    # FocusTracer is the independent trace/slicing engine KIO2 consumes as a
-    # library — NOT vendored. Install it from source (see requirements.txt):
-    #   pip install -e path/to/focustracer
-    # or from Git. Listed here so a pre-installed copy satisfies the dep.
-    "focustracer>=1.9",  # needs core.slicer / core.reverse / core.explain / core.replay / core.align
-                         # (>=1.9 for align.TraceSet + AlignedPair.seek/step/state_delta)
+    # FocusTracer, the trace/slicing engine (>= 1.9), is not on PyPI: it is
+    # installed from its public repository, so `pip install` of KIO2 needs no
+    # separate step. To work on the engine, `pip install -e` a local checkout.
+    "focustracer @ git+https://github.com/BitnetTR/focustracer.git@master",
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.29.0",
     "pydantic>=2.0",
@@ -46,7 +44,7 @@ target-version = "py310"
 src = ["src", "tests"]
 # Deliberately buggy sample programs: the bugs are the test data, and the
 # benchmarks refer to their line numbers, so they must stay as written.
-extend-exclude = ["tests/py-test-codes/codes/[0-9]*.py"]
+extend-exclude = ["tests/scenarios/[0-9]*.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

@@ -24,11 +24,12 @@ from __future__ import annotations
 import asyncio
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
+from fastapi import Body
 from pydantic import BaseModel, Field
 
-from . import jobs, kio1_protocol
+from . import __version__, jobs, kio1_protocol, openapi_examples
 from .comparator import compare
 from .contract import AlignInput, FaultLocalization, Kio2Input, ReplayInput
 from .localizer import localize
@@ -237,6 +238,19 @@ def make_app(kio_id: str = KIO_ID, title: str = TITLE):
         return _standalone_app(kio_id, title)
 
 
+#: Request bodies with ready-to-run examples for /docs. Module level for the same
+#: reason as JobRequest below: FastAPI resolves string annotations here.
+JobBody = Annotated[dict[str, Any], Body(openapi_examples=openapi_examples.job_examples())]
+ExecuteBody = Annotated[dict[str, Any], Body(openapi_examples=openapi_examples.execute_examples())]
+
+_TAGS = [
+    {"name": "KIO1 job contract", "description": "What KIO1 dispatches with: submit, then poll."},
+    {"name": "Synchronous call", "description": "The same analysis, answered in one request."},
+    {"name": "Traces", "description": "Recorded executions, as XML."},
+    {"name": "Discovery", "description": "Health, capabilities and published schemas."},
+]
+
+
 class JobRequest(BaseModel):
     """The KIO JOB_REQUEST envelope accepted by the standalone ``/execute``.
 
@@ -256,7 +270,12 @@ def _standalone_app(kio_id: str, title: str):
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
 
-    app = FastAPI(title=f"{kio_id.upper()} — {title}", version="1.0.6")
+    app = FastAPI(
+        title=f"{kio_id.upper()}: {title}",
+        version=__version__,
+        description=openapi_examples.API_DESCRIPTION,
+        openapi_tags=_TAGS,
+    )
 
     # Deployment already assumes no auth (profile P — see docs/INTEGRATION.md §7);
     # open CORS matches that posture and lets a browser-based caller (e.g. the
@@ -289,12 +308,12 @@ def _standalone_app(kio_id: str, title: str):
 
     # Both spellings: KIO2's own docs use `/health/`, KIO1 probes `/health`.
     # Registering both avoids relying on redirect-following in the caller.
-    @app.get("/health")
-    @app.get("/health/")
+    @app.get("/health", tags=["Discovery"], summary="Is the service up")
+    @app.get("/health/", include_in_schema=False)
     async def health() -> dict[str, Any]:
         return _health_body()
 
-    @app.get("/tasks")
+    @app.get("/tasks", tags=["Discovery"], summary="Capabilities and protocol versions")
     async def tasks() -> dict[str, Any]:
         """Capability discovery, in both vocabularies."""
         return {
@@ -316,7 +335,7 @@ def _standalone_app(kio_id: str, title: str):
             },
         }
 
-    @app.get("/schema")
+    @app.get("/schema", tags=["Discovery"], summary="JSON schemas of /execute")
     async def schema(name: str | None = None) -> dict[str, Any]:
         """The request/response contract, so a caller can validate against it.
 
@@ -331,8 +350,11 @@ def _standalone_app(kio_id: str, title: str):
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @app.post("/execute")
-    async def execute(body: dict[str, Any]) -> dict[str, Any]:
+    @app.post(
+        "/execute", tags=["Synchronous call"], summary="Run one capability and wait for the answer",
+        description="Pick an example, press Execute. Paths are read on the machine KIO2 runs on.",
+    )
+    async def execute(body: ExecuteBody) -> dict[str, Any]:
         """One path, two envelopes — KIO1's `config.json` registers a single path.
 
         A KIO1 execution message is answered in KIO1's reply shape; anything else
@@ -353,7 +375,10 @@ def _standalone_app(kio_id: str, title: str):
             "payload": result_payload,
         }
 
-    @app.get("/traces/{token}")
+    @app.get(
+        "/traces/{token}", tags=["Traces"], summary="Recorded trace as XML",
+        description="Use the `trace_url` of a result, or the part of a `trace_ref` after `kio2://trace/`.",
+    )
     async def get_trace(token: str):
         """The recorded trace XML behind a ``kio2://trace/<token>`` reference.
 
@@ -371,8 +396,11 @@ def _standalone_app(kio_id: str, title: str):
     # /execute envelope above; both are served, over one implementation.
     store = jobs.JobStore()
 
-    @app.post("/jobs")
-    async def submit_job(body: dict[str, Any]) -> dict[str, Any]:
+    @app.post(
+        "/jobs", tags=["KIO1 job contract"], summary="1. Submit a job",
+        description="Pick an example, press Execute, then copy the `job_id` into GET /jobs/{job_id}.",
+    )
+    async def submit_job(body: JobBody) -> dict[str, Any]:
         from fastapi import HTTPException
         try:
             request = jobs.validate_request(body)
@@ -380,7 +408,10 @@ def _standalone_app(kio_id: str, title: str):
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return store.submit(request)
 
-    @app.get("/jobs/{job_id}")
+    @app.get(
+        "/jobs/{job_id}", tags=["KIO1 job contract"], summary="2. Get the job state or result",
+        description="Returns `accepted` while the job runs, then `success` with the output, or `failure`.",
+    )
     async def get_job(job_id: str) -> dict[str, Any]:
         from fastapi import HTTPException
         reply = store.get(job_id)

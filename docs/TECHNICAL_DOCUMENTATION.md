@@ -299,10 +299,9 @@ docker run -p 8102:8102 ai4sweng-kio2
 docker run -p 8102:8102 -v "$(pwd)/workspace:/workspace:ro" ai4sweng-kio2
 ```
 
-The image installs FocusTracer from source (build arg `FOCUSTRACER_REF`, default
-`git+https://github.com/BitnetTR/focustracer.git@master`) then the KIO2 package. For
-offline builds, replace the git install with a `COPY` of a local FocusTracer
-checkout. Env: `KIO_PORT` (default 8102 — same for the image and a bare local run), `KIO_HOST`.
+The image installs the KIO2 package, which pulls FocusTracer from its public
+GitHub repository (declared in `pyproject.toml`). For an offline build, `COPY` a
+local FocusTracer checkout and install it before the KIO2 package. Env: `KIO_PORT` (default 8102 — same for the image and a bare local run), `KIO_HOST`.
 
 > Note: the runner executes the target program to capture its trace, so the
 > **target code must be reachable inside the container** — a host path (e.g.

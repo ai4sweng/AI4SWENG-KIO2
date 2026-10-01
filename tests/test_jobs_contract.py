@@ -190,3 +190,28 @@ def test_trace_urls_outside_the_trace_directory_are_refused(client):
     import base64
     token = base64.urlsafe_b64encode(str(Path(__file__).resolve()).encode()).decode().rstrip("=")
     assert client.get(f"/traces/{token}").status_code == 404
+
+
+# ── /docs examples ───────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("name, status, verdict", [
+    ("bug_localization", "success", "defect"),
+    ("clean", "success", "clean"),
+    ("diagnosis", "success", "defect"),
+    ("missing_entry_point", "failure", None),
+])
+def test_docs_examples_run_as_described(client, name, status, verdict):
+    """The one-click examples in /docs must keep working as their summaries promise."""
+    from kio2.openapi_examples import job_examples
+    request = dict(job_examples()[name]["value"], workflow_id=f"wf-docs-test-{name}")
+    reply = _run(client, request)
+    assert reply["status"] == status, reply
+    if verdict:
+        assert reply["output"]["verdict"] == verdict
+
+
+def test_docs_list_the_examples(client):
+    spec = client.get("/openapi.json").json()
+    examples = spec["paths"]["/jobs"]["post"]["requestBody"]["content"]["application/json"]["examples"]
+    assert "bug_localization" in examples

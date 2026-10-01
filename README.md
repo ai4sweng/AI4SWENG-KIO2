@@ -1,187 +1,121 @@
-# KIO2 — AI-Assisted Fault Localizer
+# KIO2: Bug Locate & Fix
 
 [![CI](https://github.com/ai4sweng/AI4SWENG-KIO2/actions/workflows/ci.yml/badge.svg)](https://github.com/ai4sweng/AI4SWENG-KIO2/actions/workflows/ci.yml)
 [![Project Board](https://img.shields.io/badge/project-AI4SWENG_KIO2-blue)](https://github.com/orgs/ai4sweng/projects/31)
 
-KIO2 turns a **failing execution** into a **ranked list of suspect statements**,
-backed by runtime evidence rather than a guess. It is developed by **BitNet**
-as part of the **AI4SWENG** European collaborative project, and this repository
-holds its requirements, source code, and documentation.
+KIO2 finds where a Python program failed. It runs the program once, records
+every executed line, and works back from the error to the lines that caused it,
+with the values they held at the time. Everything it reports comes from a real
+run, not from a guess.
 
-<!--
-  Add a short screenshot, GIF, or demo video of KIO2 in action here, for
-  example the CLI locating the fault in the bundled dummy example, or the
-  API response for a real repository. A rendered architecture diagram also
-  fits well right below the Architecture section further down.
+KIO2 is developed by **BitNet** in the **AI4SWENG** European project. It runs as
+an HTTP service that the orchestrator (KIO1) calls, and it is built on
+[FocusTracer](https://github.com/BitnetTR/focustracer), the tracing engine.
 
-  <p align="center">
-    <img src=".github/assets/demo.gif" alt="KIO2 locating a fault" width="720">
-  </p>
--->
+## Quick start
 
-## Table of contents
+Requires Python 3.10 or later. One command installs KIO2 and FocusTracer:
 
-- [KIO2 — AI-Assisted Fault Localizer](#kio2--ai-assisted-fault-localizer)
-  - [Table of contents](#table-of-contents)
-  - [What KIO2 does](#what-kio2-does)
-  - [Repository layout](#repository-layout)
-  - [Documentation map](#documentation-map)
-  - [Getting started](#getting-started)
-  - [Running with Docker](#running-with-docker)
-  - [API contract](#api-contract)
-  - [Contributing](#contributing)
-    - [Creating a requirement](#creating-a-requirement)
-    - [Creating a task](#creating-a-task)
-  - [Project board and automation](#project-board-and-automation)
+```bash
+pip install "ai4sweng-kio2 @ git+https://github.com/ai4sweng/AI4SWENG-KIO2.git"
+```
 
----
+Start the service:
 
-## What KIO2 does
+```bash
+python -m kio2.main
+```
 
-Given a failing script, KIO2 records a trace of the run and localizes the fault. In addition to fault localisation, KIO2 provides **interactive replay** (forward/backward step navigation and point-in-time state inspection) and **trace alignment** to identify divergences between passing and failing executions.
+Then open **http://127.0.0.1:8102/docs**. Under **POST /jobs** press *Try it
+out*, keep the example *bug_localization: failing example* and press *Execute*.
+Copy the `job_id` into **GET /jobs/{job_id}** to read the result: the fault is
+at line 15 of a bundled example that divides by zero.
 
+## What it does
 
-**KIO2 stops at **localization**. It does not generate the fix. This is
-**KIO7**'s job (see the [D2.6 boundary](docs/TECHNICAL_DOCUMENTATION.md#1-what-kio2-does)).** In changed requirements:
+| Capability | What it does | Needs |
+|---|---|---|
+| `bug_localization` | Record the program and report the lines behind the error. | the code and the script to run |
+| `diagnosis` | The same, written as a root cause, plus the annotated slice a fix step can use. | the code and the script to run |
+| `replay` | Walk through a recording line by line, forwards or backwards, and read the variables. | a recording |
+| `trace_alignment` | Compare two or more recordings of the same program and show where they differ. | two or more recordings |
 
+KIO2 stops at finding the fault. Writing the fix is KIO7's job. It supports
+Python programs, and it only localises failures that raise an error: a program
+that ends with a wrong result is reported as `clean`.
 
+## Working on the code
 
-1. FR-KIO2-04 — Dynamic slicing -> **Post-mortem expression evaluator**
-2. FR-KIO2-06 — Fine-tuned LLM for Bug Detection -> **AI-assisted mocking**
-3. FR-KIO2-07 — Fix suggestion generation -> **Trace recorder**
-4. FR-KIO2-08 — Thread-aware trace capture and replay simulation -> LLM Assisted Debugging??
-   
+```bash
+git clone https://github.com/ai4sweng/AI4SWENG-KIO2.git
+cd AI4SWENG-KIO2
+pip install -e ".[dev]"
+pytest -q            # the same checks CI runs, with: ruff check .
+```
 
-The engine underneath is **FocusTracer**, an independent tool consumed here as
-a library dependency, not vendored. KIO2 is the AI4SWENG service that wraps
-FocusTracer behind the KIO contract, and is reachable both as a standalone API
-and through the KIO1 dispatch protocol.
+`pip install -e .` installs FocusTracer from GitHub. If you also change the
+engine, install your local copy **afterwards**, so it is not replaced:
+
+```bash
+pip install -e ../focustracer
+```
+
+Settings such as where traces are written are read from a `.env` file; copy
+[`.env.example`](.env.example) to start. The port is `KIO_PORT` (default 8102).
+
+## Running with Docker
+
+```bash
+docker compose up --build
+```
+
+The service listens on port 8102. KIO2 can only run code it can see, so put the
+code to analyse under `./workspace` and refer to it as `/workspace/...` in a
+request.
+
+## How KIO1 calls KIO2
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /jobs`, `GET /jobs/{job_id}` | The job protocol KIO1 uses: submit, then poll for the result. |
+| `POST /execute` | The same analysis in one synchronous call, for scripts and tests. |
+| `GET /traces/{token}` | A recorded trace, as XML. |
+| `GET /health`, `GET /tasks`, `GET /schema` | Health, capabilities and the published JSON schemas. |
+| `GET /docs` | Interactive API documentation with ready-to-run examples. |
+
+[`docs/index.html`](docs/index.html) explains the input and output fields and
+links to step-by-step diagrams of each flow.
+[`docs/INTEGRATION.md`](docs/INTEGRATION.md) has the full protocol.
 
 ## Repository layout
 
 | Path | Contents |
 |---|---|
-| `docs/` | All documentation: requirements, architecture, integration, and the trace format |
-| `docs/requirements/` | One Markdown file per requirement (`FR-KIO2-01.md`, `NFR-KIO2-01.md`, ...) |
-| `docs/architecture/` | Component breakdown (`architecture.yml`) |
-| `docs/trace-schema/` | Reference documentation for the execution trace format |
-| `schema/` | The trace format itself: one XSD per schema version, plus a legacy JSON Schema draft |
-| `src/kio2/` | The service package: contract, runner, localizer, replayer, comparator, observability |
-| `src/kio2/examples/` | A bundled failing example used when no target is supplied |
-| `tests/` | The test suite, one file per requirement plus contract and protocol tests |
-| `.github/workflows/` | CI (`ci.yml`): `ruff` + `pytest` on every push and PR |
-| `Dockerfile` | Independent, headless API image |
+| `src/kio2/` | The service. See [`src/kio2/README.md`](src/kio2/README.md) for the modules. |
+| `src/kio2/examples/` | A failing program and its corrected version, used by the examples. |
+| `tests/` | The pytest suite. |
+| `tests/scenarios/` | Fifteen buggy programs to try KIO2 by hand, and the D3.3 benchmarks. |
+| `docs/` | Guide (`index.html`), diagrams (`web/`), integration and technical documentation, requirements. |
+| `schema/` | The trace file format, one XSD per version. |
+| `workspace/` | Where Docker looks for code to analyse. |
 
-## Documentation map
+## Documentation
 
-Start with the technical documentation for how KIO2 works end to end, or the
-integration guide if you are wiring KIO2 into the platform.
-
-| Document | Read this for |
+| Document | Read it for |
 |---|---|
-| [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md) | How KIO2 works: architecture, input/output, API, Docker, observability, requirement coverage |
-| [`docs/INTEGRATION.md`](docs/INTEGRATION.md) | Wiring KIO2 into the AI4SWENG platform: both protocols, endpoints, payload examples, operational caveats |
-| [`docs/trace-schema/`](docs/trace-schema/) | The trace file format FocusTracer records and KIO2 reads: structure, version history (v1 → v2.3), validation |
-| [`docs/requirements/`](docs/requirements/) | Per-requirement specifications (FR, NFR, and task IDs), issue-template format |
-| [`docs/architecture/architecture.yml`](docs/architecture/architecture.yml) | Component breakdown |
-| [`src/kio2/README.md`](src/kio2/README.md) | Module-level design notes for the `kio2` package |
-
-## Getting started
-
-```bash
-pip install -e ../../Trace/focustracer     # engine, needs >= 1.9 (or from Git — see requirements.txt)
-pip install -e ".[dev]"                    # KIO2 service + pytest
-
-# library demo:
-python -c "from kio2 import localize; from kio2.dummy import dummy_input; print(localize(dummy_input()).message)"
-
-# API service:
-python -m kio2.main                        # POST /execute, GET /health/ on :8102
-
-# lint + tests (same gates CI enforces):
-ruff check .
-pytest -q
-```
-
-> FocusTracer **≥ 1.9** is required: KIO2 imports `focustracer.core.{slicer,reverse,explain}`,
-> the replay engine, and `align.TraceSet` / `AlignedPair.seek` (added in 1.9).
-> An older install fails at import time.
-> [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs `ruff` and `pytest`
-> on every push and PR, against Python 3.11 and 3.12.
-
-## Running with Docker
-
-```bash
-docker build -t ai4sweng-kio2 .
-docker run -p 8102:8102 ai4sweng-kio2   # the port KIO1's registry has for KIO2
-```
-
-Or via Compose (`docker compose up -d --build`), which also mounts `./workspace`
-(configurable via `KIO2_WORKSPACE` in a local `.env`, see
-[`.env.example`](.env.example)) into the container at `/workspace` — KIO2 can
-only trace code it can see, so a request's `target_script` /
-`working_directory` must be a path *inside* the container, not on the host.
-See [`docs/INTEGRATION.md`](docs/INTEGRATION.md) §6.
-
-## API contract
-
-`POST /execute` serves three task types, chosen by `task_type` in the payload
-(inferred from the payload shape when omitted, so older callers keep working):
-
-| `task_type` | Payload | Returns | Requirement |
-|---|---|---|---|
-| `fault_localization` (default) | `target_script`, `working_directory`, `functions`, ... | `FaultLocalization`: ranked `suspect_lines`, `crash_state`, `confidence`, `handoff_context` | FR-KIO2-05 |
-| `replay` | `trace_path` plus a start point (`seq` / `at_line` / `at_exception`) and `step_action` (`into` / `over` / `out`, `back`) | `ReplayView`: cursor, recorded state, timeline window, def-use | FR-KIO2-02 |
-| `trace_alignment` | `trace_paths`: two traces (side-by-side) or three or more (a trace set) | `TraceComparison`: distance and divergences, or a matrix with reference and outlier | FR-KIO2-03 |
-
-`GET /tasks` lists the live set; a bare `{}` payload uses the bundled dummy
-example.
-
-The same `POST /execute` also speaks the **KIO1 dispatch protocol**
-(`workflow_id` / `step_id` / `capability` / `task` / `data` → `status` /
-`output`), so the orchestrator can call KIO2 directly for `bug_localization`,
-`diagnosis`, `replay`, and `trace_alignment`. Full details, including how the
-two protocols are told apart on one endpoint, are in
-[`docs/INTEGRATION.md`](docs/INTEGRATION.md#2-two-protocols-one-endpoint).
-
-When dropped into the AI4SWENG platform, the service auto-upgrades to a full
-KIO shell (NATS, capability announcements, HITL) with no code changes; see
-[`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md#6-integrating-kio2-into-the-general-platform-repo).
+| [`docs/index.html`](docs/index.html) | A short guide with a form to try KIO2 from the browser. |
+| [`docs/INTEGRATION.md`](docs/INTEGRATION.md) | Connecting KIO2 to the AI4SWENG platform. |
+| [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md) | How KIO2 works inside, observability, requirement coverage. |
+| [`docs/trace-schema/`](docs/trace-schema/) | The trace file format and its versions. |
+| [`docs/requirements/`](docs/requirements/) | One file per requirement (FR-KIO2-xx, NFR-KIO2-xx). |
 
 ## Contributing
 
-### Creating a requirement
-
-1. Go to **Issues → New Issue**.
-2. Use the **Create New Requirement** template.
-3. Fill in all fields (ID, description, priority, and so on).
-4. The issue is linked automatically to the `AI4SWENG KIO2` project, under **Requirements**.
-
-### Creating a task
-
-1. Go to **Issues → New Issue**.
-2. Use the **Create New Task** template.
-3. Title must start with `[TASK]`.
-4. The issue is routed automatically to the **Backlog** column of the project board.
-
-## Project board and automation
-
-Work items are tracked on a shared board:
-[AI4SWENG KIO2 Project Board](https://github.com/orgs/ai4sweng/projects/31)
-(columns: `Requirements`, `Backlog`, `In Progress`, `Done`).
-
-Issues are routed to the board by title prefix or label:
-
-| Title prefix / label | Routed column |
-|---|---|
-| `[REQ]`, `requirement` | `Requirements` |
-| `[TASK]` | `Backlog` |
-
-This routing is configured in **GitHub Projects itself** (Project → Settings →
-Workflows), not by a GitHub Action: organization-level ProjectsV2 needs a
-token with `project` scope, which the default `GITHUB_TOKEN` does not have and
-`permissions:` cannot grant. The only GitHub Action in this repository is
-[`ci.yml`](.github/workflows/ci.yml): `ruff` and `pytest` on every push and PR.
+Requirements and tasks are GitHub issues, tracked on the
+[project board](https://github.com/orgs/ai4sweng/projects/31). Open an issue with
+the **Create New Requirement** template (title `[REQ] ...`) or the **Create New
+Task** template (title `[TASK] ...`); the board sorts them into *Requirements*
+and *Backlog*. CI runs `ruff` and `pytest` on every push and pull request.
 
 ---
 

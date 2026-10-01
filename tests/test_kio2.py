@@ -66,3 +66,42 @@ def test_failed_trace_returns_failed_status():
 
 def test_example_file_exists():
     assert EXAMPLE.exists()
+
+
+def test_a_relative_working_directory_is_resolved(tmp_path, monkeypatch):
+    """The engine runs inside the project root, so relative paths must be made
+    absolute first; otherwise the run records nothing and looks clean."""
+    from kio2.contract import Kio2Input
+    from kio2.localizer import localize
+
+    (tmp_path / "proj").mkdir()
+    (tmp_path / "proj" / "boom.py").write_text(
+        "def boom(xs):\n    return xs[len(xs)]\n\nboom([1, 2])\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    result = localize(Kio2Input(target_script="boom.py", working_directory="proj"))
+    assert result.suspect_lines and result.suspect_lines[0].line == 2
+
+
+def test_a_run_that_records_nothing_is_not_reported_clean(tmp_path):
+    """A crash outside every traced function leaves an empty trace: no evidence."""
+    from kio2.contract import Kio2Input
+    from kio2.localizer import localize
+
+    (tmp_path / "mod.py").write_text(
+        "def unused():\n    return 1\n\nraise RuntimeError('at module level')\n", encoding="utf-8")
+    result = localize(Kio2Input(target_script="mod.py", working_directory=str(tmp_path)))
+    assert result.status == "FAILED"
+    assert "No traced statement executed" in result.message
+
+
+def test_a_failure_missing_from_the_trace_is_not_reported_clean(tmp_path):
+    """Deep recursion can stop the recording before the error is written. The
+    engine still exits non-zero, and that must not read as a clean run."""
+    from kio2.contract import Kio2Input
+    from kio2.localizer import localize
+
+    (tmp_path / "deep.py").write_text(
+        "def down(n):\n    return down(n + 1)\n\ndown(0)\n", encoding="utf-8")
+    result = localize(Kio2Input(target_script="deep.py", working_directory=str(tmp_path)))
+    assert result.status != "DONE" or result.suspect_lines
+    assert "No runtime defect" not in result.message

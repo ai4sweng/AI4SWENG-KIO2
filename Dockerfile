@@ -10,19 +10,13 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# git is needed to pip-install FocusTracer from its repo (slim image has none).
+# git is needed: pip installs FocusTracer from its public GitHub repository
+# (declared in pyproject.toml). The slim image has no git.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir --upgrade pip
 
-# FocusTracer = independent engine consumed as a library (adjust org/ref as needed).
-# For offline/air-gapped builds or a private repo, replace this with a COPY of a
-# local checkout + `pip install ./focustracer` (no git/network needed).
-ARG FOCUSTRACER_REF=git+https://github.com/BitnetTR/focustracer.git@master
-RUN pip install --no-cache-dir "focustracer @ ${FOCUSTRACER_REF}"
-
-# Install the KIO2 service (focustracer already satisfied above).
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 RUN pip install --no-cache-dir .

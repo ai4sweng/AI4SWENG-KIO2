@@ -139,6 +139,7 @@ def run_trace(
     timeout: float = 180.0,
     python_executable: str | None = None,
     notes: list[str] | None = None,
+    outcome: dict | None = None,
 ) -> str:
     """Trace ``target_script`` and return the path to the produced XML trace.
 
@@ -148,15 +149,21 @@ def run_trace(
 
     ``functions`` empty (or omitted) means *trace everything*: the targets are
     discovered from the project with :func:`discover_functions`. Pass ``notes``
-    (a list) to receive any human-readable remarks about that discovery.
+    (a list) to receive any human-readable remarks about that discovery, and
+    ``outcome`` (a dict) to receive the engine's ``returncode`` and the last line
+    of its error output: a run can fail without the failure being recorded.
     """
+    # Absolute paths throughout: the engine runs with `cwd` set to the project
+    # root, so a relative script path would be resolved a second time from there
+    # and point at nothing.
     script = Path(target_script)
     if working_directory:
-        cwd = str(Path(working_directory))
+        cwd = str(Path(working_directory).resolve())
         if not script.is_absolute():
             script = Path(working_directory) / target_script
     else:
-        cwd = str(script.parent) if script.parent.as_posix() else os.getcwd()
+        cwd = str(script.resolve().parent)
+    script = script.resolve()
 
     if not script.exists():
         raise RunnerError(f"target script not found: {script}")
@@ -183,7 +190,7 @@ def run_trace(
         "--output", output_path,
     ]
     if working_directory:
-        cmd += ["--project-root", str(Path(working_directory))]
+        cmd += ["--project-root", cwd]
     for fn in targets:
         cmd += ["--function", fn]
 
@@ -199,6 +206,11 @@ def run_trace(
         )
     except subprocess.TimeoutExpired as exc:
         raise RunnerError(f"tracing timed out after {timeout:.0f}s") from exc
+
+    if outcome is not None:
+        tail = (proc.stderr or "").strip().splitlines()
+        outcome["returncode"] = proc.returncode
+        outcome["error_line"] = tail[-1] if tail else ""
 
     out = Path(output_path)
     if not out.exists() or out.stat().st_size == 0:

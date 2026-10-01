@@ -32,6 +32,7 @@ def localize(inp: Kio2Input) -> FaultLocalization:
     #    everything": the runner discovers the targets from the project, and any
     #    remark about that discovery comes back in `notes` for the message.
     notes: list[str] = []
+    outcome: dict = {}
     try:
         trace_path = run_trace(
             inp.target_script,
@@ -40,6 +41,7 @@ def localize(inp: Kio2Input) -> FaultLocalization:
             detail=inp.detail,
             schema_version=inp.schema_version,
             notes=notes,
+            outcome=outcome,
             **({"timeout": inp.trace_timeout} if inp.trace_timeout else {}),
         )
     except RunnerError as exc:
@@ -58,6 +60,24 @@ def localize(inp: Kio2Input) -> FaultLocalization:
         # may not be broken (an orchestrator step, a CI hook), so "clean run" has
         # to be a successful answer; reporting it as FAILED would make every
         # healthy program look like a broken service.
+        if not _has_recorded_lines(trace_path):
+            # Nothing ran under the tracer, so there is no evidence either way.
+            # Reporting "clean" here would hide a broken invocation.
+            return FaultLocalization(
+                status="FAILED", trace_path=trace_path,
+                message="No traced statement executed: the target did not run, or it "
+                        "never called a traced function.",
+                error="empty trace; check the entry point and the repository root, or "
+                      "name the functions to trace",
+            )
+        if at_exception and outcome.get("returncode") and not _has_recorded_exception(trace_path):
+            # The program failed, but the failure is not in the trace (e.g. a
+            # RecursionError deep enough to stop the recording). Not a clean run.
+            return FaultLocalization(
+                status="REVIEW_REQUIRED", trace_path=trace_path, confidence=0.2,
+                message="The program ended with an error that was not recorded in the "
+                        f"trace, so it cannot be localised: {outcome.get('error_line') or 'see the trace'}",
+            )
         if at_exception and not _has_recorded_exception(trace_path):
             return FaultLocalization(
                 status="DONE", trace_path=trace_path, confidence=1.0,
@@ -138,6 +158,15 @@ def localize(inp: Kio2Input) -> FaultLocalization:
         trace_path=trace_path,
         message=msg,
     )
+
+
+def _has_recorded_lines(trace_path: str) -> bool:
+    """Did any traced statement execute? An empty trace is no evidence of a clean run."""
+    try:
+        with open(trace_path, encoding="utf-8", errors="replace") as fh:
+            return any('type="line"' in line for line in fh)
+    except OSError:
+        return False
 
 
 def _has_recorded_exception(trace_path: str) -> bool:

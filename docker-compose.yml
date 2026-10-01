@@ -1,11 +1,6 @@
 services:
   kio2:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        # İhtiyaç halinde farklı bir commit/branch belirtilebilir:
-        - FOCUSTRACER_REF=git+https://github.com/BitnetTR/focustracer.git@master
+    build: .
     container_name: ai4sweng-kio2
     restart: unless-stopped
     ports:

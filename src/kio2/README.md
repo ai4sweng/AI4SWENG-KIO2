@@ -4,14 +4,11 @@ The AI4SWENG **KIO2** service, built on FocusTracer. It locates the fault behind
 a failing execution — records a trace, computes a backward dynamic slice, and
 returns **ranked suspect statements** with runtime evidence.
 
-> **Home & dependency.** This is the KIO2 *service*; it lives in the AI4SWENG
-> platform (or the standalone KIO2 repo). **FocusTracer stays an independent
-> tool** and is consumed here as a library dependency — it is *not* vendored
-> inside this package. Install it separately (see `requirements.txt`):
-> `pip install -e path/to/focustracer` — **version >= 1.9**, since KIO2 imports
-> `core.slicer`, `core.reverse`, `core.explain`, the replay engine and
-> `align.TraceSet` / `AlignedPair.seek`.
-> KIO2 = the consumer; FocusTracer = the engine.
+> **Dependency.** FocusTracer stays an independent tool, consumed here as a
+> library and not copied into this package. `pip install` of KIO2 installs it
+> from its public GitHub repository (see `pyproject.toml`). KIO2 needs version
+> 1.9 or later: it imports `core.slicer`, `core.reverse`, `core.explain`, the
+> replay engine and `align.TraceSet` / `AlignedPair.seek`.
 
 Per D2.6, KIO2's scope is *localization*. It does **not** generate the fix — that
 is **KIO7**. KIO2 packages the slice (`handoff_context`) for KIO7 to consume.
@@ -24,23 +21,26 @@ platform. The same code runs three ways:
 | Mode | How |
 |---|---|
 | Library call | `from kio2 import localize; localize(inp)` |
-| Standalone service | `python -m kio2.main` → FastAPI `/execute` |
+| Standalone service | `python -m kio2.main` → FastAPI on :8102 (`/jobs`, `/execute`, `/docs`) |
 | Platform KIO shell | drop into `apps/kio_shells/` → `make_app` uses `make_kio_app` |
 
 Layers (each importable on its own):
 
 - `contract.py` — the input/output models for every task (the interface)
 - `runner.py` — runs the target under FocusTracer to produce a trace (FR-KIO2-07)
-- `localizer.py` — trace → slice → ranked suspects (FR-KIO2-05)
+- `localizer.py` — trace → slice → ranked suspects (FR-KIO2-07, FR-KIO2-05 in part)
 - `replayer.py` — post-mortem navigation over a recorded trace (FR-KIO2-02)
 - `comparator.py` — align traces / curate a trace set (FR-KIO2-03)
 - `observability.py` — optional OpenTelemetry spans/metrics (no-op if OTel absent)
-- `service.py` — KIO handler + `make_app` (platform shell or standalone FastAPI)
-- `dummy.py` + `examples/` — a bundled failing example for standalone runs
+- `service.py` — HTTP routes + `make_app` (platform shell or standalone FastAPI)
+- `kio1_protocol.py` — adapter for KIO1 messages: capabilities, trace references
+- `jobs.py` — the job contract KIO1 dispatches with (`POST /jobs`, `GET /jobs/{id}`)
+- `openapi_examples.py` — the ready-to-run examples shown at `/docs`
+- `dummy.py` + `examples/` — a failing program and its corrected version
 
 The three core modules (`localizer`, `replayer`, `comparator`) depend only on
 FocusTracer and `contract`, so each is usable as a plain function as well as over
-`/execute`. Only `runner` executes anything; the rest are read-only over a trace.
+the HTTP API. Only `runner` executes anything; the rest are read-only over a trace.
 
 ## Contract
 
@@ -91,8 +91,8 @@ no OpenTelemetry installed, all calls are no-ops.
 ## Run & test
 
 ```bash
-# standalone service (needs focustracer installed / on PYTHONPATH)
-python -m kio2.main            # serves on :8102
+# standalone service, then open http://127.0.0.1:8102/docs
+python -m kio2.main
 
 # one-shot library demo
 python -c "from kio2 import localize; from kio2.dummy import dummy_input; print(localize(dummy_input()).message)"

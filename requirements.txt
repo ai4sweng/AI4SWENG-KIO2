@@ -1,16 +1,4 @@
-# KIO2 consumes FocusTracer (independent engine) as a library — not vendored.
-# Local dev (recommended): install FocusTracer from a checkout, then this repo:
-#   pip install -e ../../Trace/focustracer
-#   pip install -e .
-# Or install FocusTracer from Git (adjust org/ref):
-#   pip install "focustracer @ git+https://github.com/BitnetTR/focustracer.git@master"
-
-focustracer>=1.9
-
-fastapi>=0.110.0
-uvicorn[standard]>=0.29.0
-pydantic>=2.0
-
-# Optional — emit OpenTelemetry spans/metrics (see src/kio2/OTEL_HANDOFF.md):
-# opentelemetry-sdk
-# opentelemetry-exporter-otlp
+# All dependencies are declared in pyproject.toml, including FocusTracer, which
+# is installed from its public GitHub repository. This file only makes
+# `pip install -r requirements.txt` do the same as `pip install -e .`.
+-e .
