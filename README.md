@@ -81,6 +81,7 @@ request.
 | `POST /execute` | The same analysis in one synchronous call, for scripts and tests. |
 | `GET /traces/{token}` | A recorded trace, as XML. |
 | `GET /health`, `GET /tasks`, `GET /schema` | Health, capabilities and the published JSON schemas. |
+| `GET /playground` | A browser playground: locate, diagnose, replay and compare, with the source marked. |
 | `GET /docs` | Interactive API documentation with ready-to-run examples. |
 
 [`docs/index.html`](docs/index.html) explains the input and output fields and
@@ -103,7 +104,7 @@ links to step-by-step diagrams of each flow.
 
 | Document | Read it for |
 |---|---|
-| [`docs/index.html`](docs/index.html) | A short guide with a form to try KIO2 from the browser. |
+| [`docs/index.html`](docs/index.html) | A short guide to the input, the output and the capabilities. |
 | [`docs/INTEGRATION.md`](docs/INTEGRATION.md) | Connecting KIO2 to the AI4SWENG platform. |
 | [`docs/TECHNICAL_DOCUMENTATION.md`](docs/TECHNICAL_DOCUMENTATION.md) | How KIO2 works inside, observability, requirement coverage. |
 | [`docs/trace-schema/`](docs/trace-schema/) | The trace file format and its versions. |

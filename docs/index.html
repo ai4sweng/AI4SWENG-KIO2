@@ -121,36 +121,8 @@
     border-radius: 10px;
     padding: 18px;
   }
-  label { display: block; font-weight: 600; font-size: 0.9rem; margin: 12px 0 4px; }
-  .hint { color: var(--text-dim); font-size: 0.85rem; font-weight: 400; }
-  input {
-    width: 100%;
-    padding: 8px 10px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--bg);
-    color: var(--text);
-    font: 0.9rem ui-monospace, SFMono-Regular, Consolas, monospace;
-  }
-  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
-  button {
-    padding: 8px 16px;
-    border-radius: 6px;
-    border: 1px solid var(--accent);
-    background: var(--accent);
-    color: #fff;
-    font: inherit;
-    font-size: 0.95rem;
-    cursor: pointer;
-  }
-  button.secondary { background: transparent; color: var(--accent); }
-  button:disabled { opacity: 0.5; cursor: default; }
-  .pill { font-size: 0.85rem; padding: 2px 10px; border-radius: 999px; background: var(--surface-2); color: var(--text-dim); }
-  .pill.ok { background: var(--ok-soft); color: var(--ok); }
-  .pill.err { background: var(--err-soft); color: var(--err); }
-  #result { margin-top: 20px; }
-  #result[hidden] { display: none; }
-  .verdict { font-weight: 600; }
+  .card p { margin: 0 0 10px; }
+  .card p:last-child { margin-bottom: 0; }
   details { margin-top: 12px; }
   summary { cursor: pointer; color: var(--accent); }
 
@@ -240,37 +212,23 @@
 
 <h2 id="try">Try it</h2>
 <p>
-  Start KIO2 (see <a href="#run">Run it</a>), then send one analysis from this page.
-  The paths are read on the machine where KIO2 runs.
+  Start KIO2 (see <a href="#run">Run it</a>) and open the playground it serves:
+  <a href="http://127.0.0.1:8102/playground"><code>http://127.0.0.1:8102/playground</code></a>.
 </p>
 <div class="card">
-  <label for="baseUrl">KIO2 address</label>
-  <input id="baseUrl" value="http://127.0.0.1:8102" spellcheck="false" />
-
-  <label for="repoPath">Repository folder
-    <span class="hint">for the bundled example: <code>&lt;KIO2 repo&gt;/src/kio2/examples</code>; in Docker: <code>/workspace/...</code></span>
-  </label>
-  <input id="repoPath" placeholder="E:/Code/AI4SWENG-KIO2/src/kio2/examples" spellcheck="false" />
-
-  <label for="entryPoint">Script to run <span class="hint">relative to the repository folder</span></label>
-  <input id="entryPoint" value="buggy_order_total.py" spellcheck="false" />
-
-  <div class="row">
-    <button id="checkBtn" class="secondary" type="button">Check service</button>
-    <button id="runBtn" type="button">Find the fault</button>
-    <span id="status" class="pill">not checked</span>
-  </div>
-
-  <div id="result" hidden>
-    <p><span id="verdict" class="verdict"></span> <span id="summary"></span></p>
-    <div id="findingsWrap" class="table-wrap"></div>
-    <div id="stateWrap"></div>
-    <p id="traceLine"></p>
-    <details>
-      <summary>Full reply (JSON)</summary>
-      <pre><code id="raw"></code></pre>
-    </details>
-  </div>
+  <p>
+    The playground runs the four capabilities from one page: <b>Locate</b> the fault,
+    <b>Diagnose</b> its cause, <b>Replay</b> the recording step by step (backwards too),
+    and <b>Compare</b> two runs. It shows the source with the suspect lines marked, and
+    every request and reply exchanged with KIO2 under <i>Show request and reply</i>.
+  </p>
+  <p>
+    It drives the same <code>POST /jobs</code> and <code>GET /jobs/{job_id}</code> that KIO1 uses,
+    so what it shows is what the orchestrator receives. The bundled failing and corrected
+    examples run as they are. To edit them or paste your own program, start KIO2 with
+    <code>KIO2_PLAYGROUND_SNIPPETS=1</code>: pasted code is executed on the KIO2 machine,
+    so enable it only on a machine you trust.
+  </p>
 </div>
 
 <h2 id="input">Input</h2>
@@ -349,6 +307,7 @@
   <tr><th>Endpoint</th><th>Purpose</th></tr>
   <tr><td><code>POST /jobs</code>, <code>GET /jobs/{job_id}</code></td><td>The job protocol KIO1 uses.</td></tr>
   <tr><td><code>POST /execute</code></td><td>The same analysis in one synchronous call, for direct use and scripts.</td></tr>
+  <tr><td><code>GET /playground</code></td><td>The browser playground over the job protocol (<a href="#try">Try it</a>).</td></tr>
   <tr><td><code>GET /traces/{token}</code></td><td>A recorded trace as XML.</td></tr>
   <tr><td><code>GET /health</code></td><td>Is the service up.</td></tr>
   <tr><td><code>GET /tasks</code></td><td>The capabilities, supported language (Python) and the job protocol version.</td></tr>
@@ -360,7 +319,7 @@
 <p>One command installs KIO2 and the FocusTracer engine (Python 3.10 or later). Then start the service on port 8102:</p>
 <pre><code>pip install "ai4sweng-kio2 @ git+https://github.com/ai4sweng/AI4SWENG-KIO2.git"
 python -m kio2.main</code></pre>
-<p>Open <code>http://127.0.0.1:8102/docs</code> to try every endpoint with ready-to-run examples.</p>
+<p>Open <code>http://127.0.0.1:8102/playground</code> to try KIO2 from the browser, or <code>http://127.0.0.1:8102/docs</code> to call every endpoint with ready-to-run examples.</p>
 <p>Or with Docker. Put the code to analyse under <code>./workspace</code> and refer to it as <code>/workspace/...</code>:</p>
 <pre><code>docker compose up --build</code></pre>
 <p>Settings are read from <code>.env</code> (see <code>.env.example</code>), for example <code>KIO2_TRACE_DIR</code> for where traces are written.</p>
@@ -375,138 +334,5 @@ python -m kio2.main</code></pre>
 
 </main>
 
-<script>
-(function () {
-  var $ = function (id) { return document.getElementById(id); };
-  var FIELDS = ["baseUrl", "repoPath", "entryPoint"];
-
-  FIELDS.forEach(function (id) {
-    try {
-      var saved = localStorage.getItem("kio2-guide-" + id);
-      if (saved) $(id).value = saved;
-    } catch (e) {}
-    $(id).addEventListener("change", function () {
-      try { localStorage.setItem("kio2-guide-" + id, $(id).value.trim()); } catch (e) {}
-    });
-  });
-
-  function base() { return $("baseUrl").value.trim().replace(/\/+$/, ""); }
-
-  function setStatus(text, kind) {
-    var el = $("status");
-    el.textContent = text;
-    el.className = "pill" + (kind ? " " + kind : "");
-  }
-
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-    });
-  }
-
-  function fileUri(path) {
-    var p = path.replace(/\\/g, "/");
-    if (/^[A-Za-z]:/.test(p)) p = "/" + p;
-    return "file://" + encodeURI(p);
-  }
-
-  $("checkBtn").addEventListener("click", function () {
-    setStatus("checking", null);
-    fetch(base() + "/health")
-      .then(function (r) { return r.json(); })
-      .then(function (b) { setStatus(b.status === "ok" ? "service is up" : "unexpected reply", b.status === "ok" ? "ok" : "err"); })
-      .catch(function () { setStatus("not reachable", "err"); });
-  });
-
-  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-
-  async function runJob() {
-    var repo = $("repoPath").value.trim();
-    var entry = $("entryPoint").value.trim();
-    if (!repo || !entry) { setStatus("fill in both paths", "err"); return; }
-
-    var sep = repo.endsWith("/") || repo.endsWith("\\") ? "" : "/";
-    var request = {
-      schema_version: "1.0",
-      workflow_id: "wf-guide",
-      step_id: "s-" + Date.now(),
-      capability: "bug_localization",
-      task: "Find the fault",
-      data: {
-        repository: { uri: fileUri(repo) },
-        entry_point: { uri: fileUri(repo + sep + entry) }
-      }
-    };
-
-    $("runBtn").disabled = true;
-    setStatus("running", null);
-    try {
-      var ack = await (await fetch(base() + "/jobs", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(request)
-      })).json();
-      if (ack.status !== "accepted") throw new Error(JSON.stringify(ack));
-
-      var reply = ack;
-      for (var i = 0; i < 120 && reply.status === "accepted"; i++) {
-        await sleep(1000);
-        reply = await (await fetch(base() + "/jobs/" + encodeURIComponent(ack.job_id))).json();
-      }
-      show(reply);
-    } catch (e) {
-      setStatus("request failed", "err");
-      $("result").hidden = false;
-      $("verdict").textContent = "";
-      $("summary").textContent = String(e.message || e);
-    } finally {
-      $("runBtn").disabled = false;
-    }
-  }
-
-  function show(reply) {
-    $("result").hidden = false;
-    $("raw").textContent = JSON.stringify(reply, null, 2);
-    $("findingsWrap").innerHTML = "";
-    $("stateWrap").innerHTML = "";
-    $("traceLine").innerHTML = "";
-
-    if (reply.status !== "success") {
-      setStatus("failure", "err");
-      $("verdict").textContent = reply.failure_class || reply.status;
-      $("summary").textContent = (reply.diagnostics && reply.diagnostics.message) || "";
-      return;
-    }
-    var out = reply.output || {};
-    setStatus("done", "ok");
-    $("verdict").textContent = out.verdict || "";
-    $("summary").textContent = out.summary || "";
-
-    var findings = out.findings || [];
-    if (findings.length) {
-      var rows = findings.map(function (f) {
-        return "<tr><td>" + escapeHtml(f.file) + ":" + f.line + "</td><td>" + escapeHtml(f.dependency) +
-          "</td><td>" + f.confidence + "</td><td><code>" + escapeHtml(f.description) + "</code></td></tr>";
-      }).join("");
-      $("findingsWrap").innerHTML = "<table><tr><th>Line</th><th>Dependency</th><th>Confidence</th><th>Statement</th></tr>" + rows + "</table>";
-    }
-
-    var state = out.crash_state || {};
-    var names = Object.keys(state);
-    if (names.length) {
-      $("stateWrap").innerHTML = "<h3>Variables at the error</h3><div class=\"table-wrap\"><table>" +
-        names.map(function (n) { return "<tr><td><code>" + escapeHtml(n) + "</code></td><td><code>" + escapeHtml(state[n]) + "</code></td></tr>"; }).join("") +
-        "</table></div>";
-    }
-
-    if (out.trace_url) {
-      var url = base() + out.trace_url;
-      $("traceLine").innerHTML = "Recorded trace: <a href=\"" + escapeHtml(url) + "\" target=\"_blank\" rel=\"noopener\">open the XML</a>";
-    }
-  }
-
-  $("runBtn").addEventListener("click", runJob);
-})();
-</script>
 </body>
 </html>

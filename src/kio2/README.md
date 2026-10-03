@@ -35,6 +35,7 @@ Layers (each importable on its own):
 - `service.py` — HTTP routes + `make_app` (platform shell or standalone FastAPI)
 - `kio1_protocol.py` — adapter for KIO1 messages: capabilities, trace references
 - `jobs.py` — the job contract KIO1 dispatches with (`POST /jobs`, `GET /jobs/{id}`)
+- `playground.py` + `playground/index.html` — the browser playground at `/playground` (pasted code only with `KIO2_PLAYGROUND_SNIPPETS=1`)
 - `openapi_examples.py` — the ready-to-run examples shown at `/docs`
 - `dummy.py` + `examples/` — a failing program and its corrected version
 

@@ -30,6 +30,8 @@ from the error to the lines that caused it.
 
 **POST /execute** does the same in one synchronous call.
 
+For a guided view of all four capabilities, open [/playground](/playground).
+
 A job is identified by `workflow_id` + `step_id`: sending the same pair again
 returns the existing job. Change `step_id` to run it again.
 """

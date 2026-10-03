@@ -29,7 +29,7 @@ from typing import Annotated, Any
 from fastapi import Body
 from pydantic import BaseModel, Field
 
-from . import __version__, jobs, kio1_protocol, openapi_examples
+from . import __version__, jobs, kio1_protocol, openapi_examples, playground
 from .comparator import compare
 from .contract import AlignInput, FaultLocalization, Kio2Input, ReplayInput
 from .localizer import localize
@@ -248,6 +248,7 @@ _TAGS = [
     {"name": "Synchronous call", "description": "The same analysis, answered in one request."},
     {"name": "Traces", "description": "Recorded executions, as XML."},
     {"name": "Discovery", "description": "Health, capabilities and published schemas."},
+    {"name": "Playground", "description": "A browser front end over the job contract: open /playground."},
 ]
 
 
@@ -279,7 +280,7 @@ def _standalone_app(kio_id: str, title: str):
 
     # Deployment already assumes no auth (profile P — see docs/INTEGRATION.md §7);
     # open CORS matches that posture and lets a browser-based caller (e.g. the
-    # docs/index.html playground) reach /execute directly from any origin.
+    # /playground page, or docs/index.html opened from disk) reach the API from any origin.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -418,6 +419,8 @@ def _standalone_app(kio_id: str, title: str):
         if reply is None:
             raise HTTPException(status_code=404, detail=f"unknown job {job_id!r}")
         return reply
+
+    playground.register(app)
 
     return app
 

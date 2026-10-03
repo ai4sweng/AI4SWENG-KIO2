@@ -30,8 +30,8 @@ where = ["src"]
 include = ["kio2*"]
 
 [tool.setuptools.package-data]
-# The schemas are served at runtime from GET /schema, so they are package data.
-"kio2" = ["examples/*.py", "schemas/*.json"]
+# The schemas (GET /schema) and the playground page (GET /playground) are served at runtime.
+"kio2" = ["examples/*.py", "schemas/*.json", "playground/*.html"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
