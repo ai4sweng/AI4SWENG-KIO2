@@ -1,0 +1,223 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "KIO2 replay of a recording",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [
+      1080,
+      664
+    ]
+  },
+  "participants": [
+    {
+      "id": "kio1",
+      "type": "external",
+      "label": "KIO1",
+      "sublabel": "orchestrator"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "KIO2 API",
+      "sublabel": "HTTP + job queue"
+    },
+    {
+      "id": "handler",
+      "type": "backend",
+      "label": "Task handler",
+      "sublabel": "builds the answer"
+    },
+    {
+      "id": "replayer",
+      "type": "backend",
+      "label": "Replayer",
+      "sublabel": "replayer.py"
+    },
+    {
+      "id": "engine",
+      "type": "cloud",
+      "label": "FocusTracer",
+      "sublabel": "core.replay"
+    },
+    {
+      "id": "traces",
+      "type": "database",
+      "label": "Trace files",
+      "sublabel": "KIO2_TRACE_DIR"
+    }
+  ],
+  "segments": [
+    {
+      "from": 184,
+      "to": 280,
+      "label": "1. Request with a trace"
+    },
+    {
+      "from": 290,
+      "to": 388,
+      "label": "2. Rebuild the timeline"
+    },
+    {
+      "from": 398,
+      "to": 564,
+      "label": "3. Move the cursor and answer"
+    }
+  ],
+  "messages": [
+    {
+      "id": "m-submit",
+      "from": "kio1",
+      "to": "api",
+      "y": 200,
+      "label": "POST /jobs: replay",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m-start",
+      "from": "api",
+      "to": "handler",
+      "y": 232,
+      "label": "run replay",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m-replay",
+      "from": "handler",
+      "to": "replayer",
+      "y": 264,
+      "label": "replay(trace)",
+      "variant": "default"
+    },
+    {
+      "id": "m-load",
+      "from": "replayer",
+      "to": "engine",
+      "y": 306,
+      "label": "from_trace()",
+      "variant": "default"
+    },
+    {
+      "id": "m-read",
+      "from": "engine",
+      "to": "traces",
+      "y": 338,
+      "label": "read XML",
+      "variant": "default"
+    },
+    {
+      "id": "m-timeline",
+      "from": "engine",
+      "to": "replayer",
+      "y": 370,
+      "label": "line events",
+      "variant": "return"
+    },
+    {
+      "id": "m-move",
+      "from": "replayer",
+      "to": "engine",
+      "y": 414,
+      "label": "jump, step",
+      "variant": "default"
+    },
+    {
+      "id": "m-state",
+      "from": "engine",
+      "to": "replayer",
+      "y": 446,
+      "label": "state at cursor",
+      "variant": "return"
+    },
+    {
+      "id": "m-view",
+      "from": "replayer",
+      "to": "handler",
+      "y": 478,
+      "label": "cursor, timeline",
+      "variant": "return"
+    },
+    {
+      "id": "m-answer",
+      "from": "handler",
+      "to": "api",
+      "y": 510,
+      "label": "replay_view",
+      "variant": "return"
+    },
+    {
+      "id": "m-final",
+      "from": "api",
+      "to": "kio1",
+      "y": 542,
+      "label": "success (on poll)",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "api",
+      "from": 194,
+      "to": 240,
+      "type": "backend"
+    },
+    {
+      "participant": "handler",
+      "from": 226,
+      "to": 518,
+      "type": "backend"
+    },
+    {
+      "participant": "replayer",
+      "from": 258,
+      "to": 486,
+      "type": "backend"
+    },
+    {
+      "participant": "engine",
+      "from": 300,
+      "to": 378,
+      "type": "cloud"
+    },
+    {
+      "participant": "engine",
+      "from": 408,
+      "to": 454,
+      "type": "cloud"
+    },
+    {
+      "participant": "api",
+      "from": 504,
+      "to": 550,
+      "type": "backend"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "In",
+      "items": [
+        "trace: a kio2://trace/ reference from an earlier step",
+        "Cursor: at_exception, seq or at_line, then step, into, over, out or back"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Out",
+      "items": [
+        "current: the line at the cursor and every variable's value",
+        "timeline: the neighbouring lines, to move on from"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Good to know",
+      "items": [
+        "Nothing is re-run: only the XML is read",
+        "From KIO1 it opens at the failure; /execute also takes a cursor"
+      ]
+    }
+  ]
+}

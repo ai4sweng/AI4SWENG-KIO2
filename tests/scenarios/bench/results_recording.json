@@ -1,0 +1,182 @@
+{
+ "sample": [
+  {
+   "prog": "01",
+   "native_ms": 12.3,
+   "traced_ms": 196.6,
+   "ratio": 15.9,
+   "lines": 11,
+   "bytes": 8294,
+   "bytes_per_line": 754.0,
+   "schema": "2.3",
+   "trace": "/tmp/kio2_f2ef7b4eb791477b96575bc6189c5570.xml"
+  },
+  {
+   "prog": "02",
+   "native_ms": 11.6,
+   "traced_ms": 181.3,
+   "ratio": 15.6,
+   "lines": 2,
+   "bytes": 3380,
+   "bytes_per_line": 1690.0,
+   "schema": "2.3",
+   "trace": "/tmp/kio2_df414387fb694c9e93de0aefbc21a687.xml"
+  },
+  {
+   "prog": "03",
+   "native_ms": 12.1,
+   "traced_ms": 197.5,
+   "ratio": 16.3,
+   "lines": 10,
+   "bytes": 8562,
+   "bytes_per_line": 856.2,
+   "schema": "2.3",
+   "trace": "/tmp/kio2_4a27a897a2034686bb67db9c6001d1d7.xml"
+  },
+  {
+   "prog": "04",
+   "native_ms": 11.4,
+   "traced_ms": 196.1,
+   "ratio": 17.2,
+   "lines": 3,
+   "bytes": 3185,
+   "bytes_per_line": 1061.7,
+   "schema": "2.3",
+   "trace": "/tmp/kio2_6b44b7fbbf8049a897e3bf6ccbadbf2d.xml"
+  }
+ ],
+ "scale": [
+  {
+   "N": 100,
+   "native_ms": 11.4,
+   "traced_ms": 219.4,
+   "ratio": 19.3,
+   "lines": 203,
+   "bytes": 85531,
+   "bytes_per_line": 421.3
+  },
+  {
+   "N": 1000,
+   "native_ms": 11.4,
+   "traced_ms": 497.7,
+   "ratio": 43.6,
+   "lines": 2003,
+   "bytes": 845872,
+   "bytes_per_line": 422.3
+  },
+  {
+   "N": 10000,
+   "native_ms": 15.7,
+   "traced_ms": 3781.7,
+   "ratio": 241.1,
+   "lines": 20003,
+   "bytes": 8548117,
+   "bytes_per_line": 427.3
+  },
+  {
+   "N": 50000,
+   "native_ms": 12.3,
+   "traced_ms": 19059.9,
+   "ratio": 1550.9,
+   "lines": 100003,
+   "bytes": 43110402,
+   "bytes_per_line": 431.1
+  }
+ ],
+ "reliability": [
+  {
+   "prog": "01_siparis_toplami_hesaplama.py",
+   "folder": "progs",
+   "ok": true,
+   "ms": 188.2,
+   "lines": 11
+  },
+  {
+   "prog": "02_kullanici_profil_guncelleme.py",
+   "folder": "progs",
+   "ok": true,
+   "ms": 181.8,
+   "lines": 2
+  },
+  {
+   "prog": "03_sicaklik_degerleri_ortalamasi.py",
+   "folder": "progs",
+   "ok": true,
+   "ms": 188.9,
+   "lines": 10
+  },
+  {
+   "prog": "04_banka_hesabi_para_cekme.py",
+   "folder": "progs",
+   "ok": true,
+   "ms": 190.7,
+   "lines": 3
+  },
+  {
+   "prog": "05_veritabani_baglanti_havuzu.py",
+   "folder": "others",
+   "ok": false,
+   "reason": "RunnerError: no functions found to trace under /tmp/bench/others. The engine needs at least one function target; pass 'functions' explicitly."
+  },
+  {
+   "prog": "06_musteri_indirim_kuponu.py",
+   "folder": "others",
+   "ok": false,
+   "reason": "RunnerError: no functions found to trace under /tmp/bench/others. The engine needs at least one function target; pass 'functions' explicitly."
+  },
+  {
+   "prog": "07_faktoriyel_hesaplama.py",
+   "folder": "others",
+   "ok": false,
+   "reason": "RunnerError: no functions found to trace under /tmp/bench/others. The engine needs at least one function target; pass 'functions' explicitly."
+  },
+  {
+   "prog": "08_sensor_verisi_loglayici.py",
+   "folder": "others",
+   "ok": false,
+   "reason": "RunnerError: no functions found to trace under /tmp/bench/others. The engine needs at least one function target; pass 'functions' explicitly."
+  },
+  {
+   "prog": "09_kullanici_kayit_sifre_kontrol.py",
+   "folder": "others",
+   "ok": false,
+   "reason": "RunnerError: no functions found to trace under /tmp/bench/others. The engine needs at least one function target; pass 'functions' explicitly."
+  },
+  {
+   "prog": "10_dizi_elemanlari_farki.py",
+   "folder": "others",
+   "ok": false,
+   "reason": "RunnerError: no functions found to trace under /tmp/bench/others. The engine needs at least one function target; pass 'functions' explicitly."
+  },
+  {
+   "prog": "11_urun_fiyat_guncelleme.py",
+   "folder": "others",
+   "ok": false,
+   "reason": "RunnerError: no functions found to trace under /tmp/bench/others. The engine needs at least one function target; pass 'functions' explicitly."
+  },
+  {
+   "prog": "12_dosya_icerigi_ayristirici.py",
+   "folder": "others",
+   "ok": false,
+   "reason": "RunnerError: no functions found to trace under /tmp/bench/others. The engine needs at least one function target; pass 'functions' explicitly."
+  },
+  {
+   "prog": "13_abonelik_yenileme.py",
+   "folder": "others",
+   "ok": false,
+   "reason": "RunnerError: no functions found to trace under /tmp/bench/others. The engine needs at least one function target; pass 'functions' explicitly."
+  },
+  {
+   "prog": "14_iki_listenin_kesisimi.py",
+   "folder": "others",
+   "ok": false,
+   "reason": "RunnerError: no functions found to trace under /tmp/bench/others. The engine needs at least one function target; pass 'functions' explicitly."
+  },
+  {
+   "prog": "15_onbellek_temizleme.py",
+   "folder": "others",
+   "ok": false,
+   "reason": "RunnerError: no functions found to trace under /tmp/bench/others. The engine needs at least one function target; pass 'functions' explicitly."
+  }
+ ]
+}

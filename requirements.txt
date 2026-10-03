@@ -1,0 +1,4 @@
+# All dependencies are declared in pyproject.toml, including FocusTracer, which
+# is installed from its public GitHub repository. This file only makes
+# `pip install -r requirements.txt` do the same as `pip install -e .`.
+-e .

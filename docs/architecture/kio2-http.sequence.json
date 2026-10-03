@@ -1,0 +1,224 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "KIO1 calls KIO2: the HTTP exchange",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [
+      1080,
+      660
+    ]
+  },
+  "participants": [
+    {
+      "id": "kio1",
+      "type": "external",
+      "label": "KIO1",
+      "sublabel": "orchestrator"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "KIO2 API",
+      "sublabel": "HTTP + job queue"
+    },
+    {
+      "id": "analysis",
+      "type": "backend",
+      "label": "KIO2 analysis",
+      "sublabel": "record, slice, replay"
+    },
+    {
+      "id": "traces",
+      "type": "database",
+      "label": "Trace files",
+      "sublabel": "KIO2_TRACE_DIR"
+    }
+  ],
+  "segments": [
+    {
+      "from": 160,
+      "to": 224,
+      "label": "1. Submit"
+    },
+    {
+      "from": 234,
+      "to": 330,
+      "label": "2. Analyse in background"
+    },
+    {
+      "from": 340,
+      "to": 404,
+      "label": "3. Poll for the result"
+    },
+    {
+      "from": 414,
+      "to": 574,
+      "label": "4. Reuse the trace"
+    }
+  ],
+  "messages": [
+    {
+      "id": "m-submit",
+      "from": "kio1",
+      "to": "api",
+      "y": 176,
+      "label": "POST /jobs (file:// refs)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m-ack",
+      "from": "api",
+      "to": "kio1",
+      "y": 208,
+      "label": "accepted, job_id",
+      "variant": "return"
+    },
+    {
+      "id": "m-start",
+      "from": "api",
+      "to": "analysis",
+      "y": 250,
+      "label": "run bug_localization",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m-write",
+      "from": "analysis",
+      "to": "traces",
+      "y": 282,
+      "label": "write trace XML",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m-output",
+      "from": "analysis",
+      "to": "api",
+      "y": 314,
+      "label": "findings, trace_ref",
+      "variant": "return"
+    },
+    {
+      "id": "m-poll",
+      "from": "kio1",
+      "to": "api",
+      "y": 356,
+      "label": "GET /jobs/{job_id}",
+      "variant": "default"
+    },
+    {
+      "id": "m-final",
+      "from": "api",
+      "to": "kio1",
+      "y": 388,
+      "label": "success, artifacts",
+      "variant": "return"
+    },
+    {
+      "id": "m-follow",
+      "from": "kio1",
+      "to": "api",
+      "y": 430,
+      "label": "POST /jobs: replay",
+      "variant": "default"
+    },
+    {
+      "id": "m-replay",
+      "from": "api",
+      "to": "analysis",
+      "y": 462,
+      "label": "run replay",
+      "variant": "default"
+    },
+    {
+      "id": "m-read",
+      "from": "analysis",
+      "to": "traces",
+      "y": 494,
+      "label": "read trace XML",
+      "variant": "default"
+    },
+    {
+      "id": "m-view",
+      "from": "analysis",
+      "to": "api",
+      "y": 526,
+      "label": "replay_view",
+      "variant": "return"
+    },
+    {
+      "id": "m-follow-back",
+      "from": "api",
+      "to": "kio1",
+      "y": 558,
+      "label": "success (on next poll)",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "api",
+      "from": 170,
+      "to": 216,
+      "type": "backend"
+    },
+    {
+      "participant": "api",
+      "from": 244,
+      "to": 322,
+      "type": "backend"
+    },
+    {
+      "participant": "analysis",
+      "from": 244,
+      "to": 322,
+      "type": "backend"
+    },
+    {
+      "participant": "api",
+      "from": 350,
+      "to": 396,
+      "type": "backend"
+    },
+    {
+      "participant": "api",
+      "from": 424,
+      "to": 566,
+      "type": "backend"
+    },
+    {
+      "participant": "analysis",
+      "from": 456,
+      "to": 534,
+      "type": "backend"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "In and out",
+      "items": [
+        "In: repository and entry_point as file:// URIs",
+        "Out: verdict, findings, crash_state, trace"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Open a trace",
+      "items": [
+        "GET /traces/{token} returns the recorded XML",
+        "Only files in KIO2_TRACE_DIR are served"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Code map (all inside KIO2)",
+      "items": [
+        "API: service.py, jobs.py",
+        "Analysis: kio1_protocol.py, localizer.py"
+      ]
+    }
+  ]
+}

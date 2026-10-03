@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Inside KIO2: one bug localization",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [1080, 640]
+  },
+  "participants": [
+    { "id": "api", "type": "backend", "label": "KIO2 API", "sublabel": "job queue" },
+    { "id": "handler", "type": "backend", "label": "Task handler", "sublabel": "job to analysis input" },
+    { "id": "localizer", "type": "backend", "label": "Localizer", "sublabel": "localizer.py" },
+    { "id": "runner", "type": "backend", "label": "Runner", "sublabel": "runner.py" },
+    { "id": "engine", "type": "cloud", "label": "FocusTracer", "sublabel": "tracing engine" },
+    { "id": "traces", "type": "database", "label": "Trace files", "sublabel": "KIO2_TRACE_DIR" }
+  ],
+  "segments": [
+    { "from": 160, "to": 226, "label": "1. Prepare" },
+    { "from": 236, "to": 370, "label": "2. Record: run the program once" },
+    { "from": 380, "to": 548, "label": "3. Slice: work on the recording" }
+  ],
+  "messages": [
+    { "id": "m-job", "from": "api", "to": "handler", "y": 176, "label": "repo, entry_point", "variant": "emphasis" },
+    { "id": "m-localize", "from": "handler", "to": "localizer", "y": 210, "label": "localize()", "variant": "default" },
+
+    { "id": "m-run", "from": "localizer", "to": "runner", "y": 252, "label": "run_trace()", "variant": "default" },
+    { "id": "m-subprocess", "from": "runner", "to": "engine", "y": 286, "label": "subprocess: run", "variant": "emphasis" },
+    { "id": "m-write", "from": "engine", "to": "traces", "y": 320, "label": "write XML", "variant": "emphasis" },
+    { "id": "m-path", "from": "runner", "to": "localizer", "y": 354, "label": "trace path", "variant": "return" },
+
+    { "id": "m-slice", "from": "localizer", "to": "engine", "y": 396, "label": "library: slicer, reverse", "variant": "default" },
+    { "id": "m-read", "from": "engine", "to": "traces", "y": 430, "label": "read XML", "variant": "default" },
+    { "id": "m-slice-back", "from": "engine", "to": "localizer", "y": 464, "label": "slice, crash state", "variant": "return" },
+    { "id": "m-rank", "from": "localizer", "to": "handler", "y": 498, "label": "ranked lines", "variant": "return" },
+    { "id": "m-reply", "from": "handler", "to": "api", "y": 532, "label": "verdict, findings", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "handler", "from": 170, "to": 540, "type": "backend" },
+    { "participant": "localizer", "from": 204, "to": 506, "type": "backend" },
+    { "participant": "runner", "from": 246, "to": 362, "type": "backend" },
+    { "participant": "engine", "from": 280, "to": 328, "type": "cloud" },
+    { "participant": "engine", "from": 390, "to": 472, "type": "cloud" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "2. Record", "items": ["The program runs once, in a separate process", "Each executed line, with what it read and changed, goes into one XML file"] },
+    { "dot": "emerald", "title": "3. Slice", "items": ["From the line that raised, follow the values backwards", "Keep the lines that fed the failure, with the values at the crash"] },
+    { "dot": "slate", "title": "Code map (all inside KIO2)", "items": ["KIO2 API: service.py, jobs.py", "Task handler: kio1_protocol.py"] }
+  ]
+}
