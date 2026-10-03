@@ -213,7 +213,7 @@
 <h2 id="try">Try it</h2>
 <p>
   Start KIO2 (see <a href="#run">Run it</a>) and open the playground it serves:
-  <a href="http://127.0.0.1:8102/playground"><code>http://127.0.0.1:8102/playground</code></a>.
+  <code>http://&lt;your_ip&gt;:8102/playground</code>.
 </p>
 <div class="card">
   <p>
@@ -319,7 +319,7 @@
 <p>One command installs KIO2 and the FocusTracer engine (Python 3.10 or later). Then start the service on port 8102:</p>
 <pre><code>pip install "ai4sweng-kio2 @ git+https://github.com/ai4sweng/AI4SWENG-KIO2.git"
 python -m kio2.main</code></pre>
-<p>Open <code>http://127.0.0.1:8102/playground</code> to try KIO2 from the browser, or <code>http://127.0.0.1:8102/docs</code> to call every endpoint with ready-to-run examples.</p>
+<p>Open <code>http://&lt;your_ip&gt;:8102/playground</code> to try KIO2 from the browser, or <code>http://&lt;your_ip&gt;:8102/docs</code> to call every endpoint with ready-to-run examples.</p>
 <p>Or with Docker. Put the code to analyse under <code>./workspace</code> and refer to it as <code>/workspace/...</code>:</p>
 <pre><code>docker compose up --build</code></pre>
 <p>Settings are read from <code>.env</code> (see <code>.env.example</code>), for example <code>KIO2_TRACE_DIR</code> for where traces are written.</p>
