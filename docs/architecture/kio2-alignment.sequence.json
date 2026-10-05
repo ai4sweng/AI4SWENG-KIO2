@@ -1,0 +1,209 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "KIO2 comparison of runs",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [
+      1080,
+      624
+    ]
+  },
+  "participants": [
+    {
+      "id": "kio1",
+      "type": "external",
+      "label": "KIO1",
+      "sublabel": "orchestrator"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "KIO2 API",
+      "sublabel": "HTTP + job queue"
+    },
+    {
+      "id": "handler",
+      "type": "backend",
+      "label": "Task handler",
+      "sublabel": "builds the answer"
+    },
+    {
+      "id": "comparator",
+      "type": "backend",
+      "label": "Comparator",
+      "sublabel": "comparator.py"
+    },
+    {
+      "id": "engine",
+      "type": "cloud",
+      "label": "FocusTracer",
+      "sublabel": "core.align"
+    },
+    {
+      "id": "traces",
+      "type": "database",
+      "label": "Trace files",
+      "sublabel": "KIO2_TRACE_DIR"
+    }
+  ],
+  "segments": [
+    {
+      "from": 184,
+      "to": 280,
+      "label": "1. Request with two or more traces"
+    },
+    {
+      "from": 290,
+      "to": 388,
+      "label": "2. Turn each run into steps, then align"
+    },
+    {
+      "from": 398,
+      "to": 526,
+      "label": "3. Answer"
+    }
+  ],
+  "messages": [
+    {
+      "id": "m-submit",
+      "from": "kio1",
+      "to": "api",
+      "y": 200,
+      "label": "POST /jobs: alignment",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m-start",
+      "from": "api",
+      "to": "handler",
+      "y": 232,
+      "label": "run alignment",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m-compare",
+      "from": "handler",
+      "to": "comparator",
+      "y": 264,
+      "label": "compare(traces)",
+      "variant": "default"
+    },
+    {
+      "id": "m-align",
+      "from": "comparator",
+      "to": "engine",
+      "y": 306,
+      "label": "align traces",
+      "variant": "default"
+    },
+    {
+      "id": "m-read",
+      "from": "engine",
+      "to": "traces",
+      "y": 338,
+      "label": "read each XML",
+      "variant": "default"
+    },
+    {
+      "id": "m-result",
+      "from": "engine",
+      "to": "comparator",
+      "y": 370,
+      "label": "aligned steps, gaps",
+      "variant": "return"
+    },
+    {
+      "id": "m-report",
+      "from": "comparator",
+      "to": "handler",
+      "y": 414,
+      "label": "distance, divergences",
+      "variant": "return"
+    },
+    {
+      "id": "m-answer",
+      "from": "handler",
+      "to": "api",
+      "y": 446,
+      "label": "trace_comparison",
+      "variant": "return"
+    },
+    {
+      "id": "m-poll",
+      "from": "kio1",
+      "to": "api",
+      "y": 478,
+      "label": "GET /jobs/{job_id}",
+      "variant": "default"
+    },
+    {
+      "id": "m-final",
+      "from": "api",
+      "to": "kio1",
+      "y": 510,
+      "label": "success, comparison",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "api",
+      "from": 194,
+      "to": 240,
+      "type": "backend"
+    },
+    {
+      "participant": "handler",
+      "from": 226,
+      "to": 454,
+      "type": "backend"
+    },
+    {
+      "participant": "comparator",
+      "from": 258,
+      "to": 422,
+      "type": "backend"
+    },
+    {
+      "participant": "engine",
+      "from": 300,
+      "to": 378,
+      "type": "cloud"
+    },
+    {
+      "participant": "api",
+      "from": 472,
+      "to": 518,
+      "type": "backend"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "How it aligns",
+      "items": [
+        "Each run becomes a list of executed steps, one per function:line",
+        "The lists are aligned like DNA sequences (Needleman-Wunsch)"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Out",
+      "items": [
+        "Two traces: distance (unmatched steps) and where they diverge",
+        "Three or more: distance matrix, typical run, most different run"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Good to know",
+      "items": [
+        "Meant for one program run with different inputs",
+        "Lines are matched by number, not by their source text"
+      ]
+    }
+  ]
+}

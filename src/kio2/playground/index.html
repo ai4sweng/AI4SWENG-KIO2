@@ -1,0 +1,951 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>KIO2 Playground</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --page: #e9edf2;
+    --panel: #ffffff;
+    --sunken: #f4f6f9;
+    --ink: #17202b;
+    --muted: #586474;
+    --rule: #d3dae3;
+    --cobalt: #2a55c9;
+    --cobalt-soft: #e3eafb;
+    --fault: #b3261e;
+    --fault-soft: #fbe7e5;
+    --clean: #17784a;
+    --clean-soft: #e2f3ea;
+    --amber: #b86e00;
+    --amber-soft: #fff0d1;
+    --code: #24303d;
+    --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", Consolas, "Cascadia Mono", monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #0f1620;
+      --panel: #17212d;
+      --sunken: #1d2937;
+      --ink: #e6ebf1;
+      --muted: #9aa7b6;
+      --rule: #2c3a4a;
+      --cobalt: #7d9ef2;
+      --cobalt-soft: #1f2d4d;
+      --fault: #f08a80;
+      --fault-soft: #3b1f20;
+      --clean: #6fd19f;
+      --clean-soft: #173126;
+      --amber: #f2b552;
+      --amber-soft: #3a2c12;
+      --code: #d7dee7;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 15px/1.5 var(--sans);
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--cobalt); outline-offset: 2px; }
+  code, pre, .mono { font-family: var(--mono); }
+
+  /* ── header ─────────────────────────────────────────────── */
+  header {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 14px 24px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--rule);
+  }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  header .tagline { color: var(--muted); font-size: 14px; }
+  header .spacer { flex: 1; }
+  .service { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--rule); }
+  .dot.ok { background: var(--clean); }
+  .dot.err { background: var(--fault); }
+  .service input {
+    width: 210px; padding: 5px 8px; border: 1px solid var(--rule); border-radius: 6px;
+    background: var(--sunken); font-family: var(--mono); font-size: 13px;
+  }
+
+  /* ── layout ─────────────────────────────────────────────── */
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: 20px;
+    padding: 20px 24px 40px;
+    max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; padding: 16px; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    min-width: 0;
+  }
+  .panel-head {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 14px 18px; border-bottom: 1px solid var(--rule);
+  }
+  .panel-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+  .panel-body { padding: 18px; }
+
+  /* ── program panel ──────────────────────────────────────── */
+  .sources { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--rule); background: var(--panel);
+    padding: 5px 11px; border-radius: 999px; cursor: pointer; font-size: 14px;
+  }
+  .chip[aria-pressed="true"] { background: var(--cobalt-soft); border-color: var(--cobalt); color: var(--cobalt); font-weight: 500; }
+  .program-meta { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 12px 18px 0; }
+  .program-meta .file { font-family: var(--mono); font-size: 14px; font-weight: 500; }
+  .program-meta .note { color: var(--muted); font-size: 14px; }
+  .program-meta .spacer { flex: 1; }
+  .linkish { background: none; border: none; color: var(--cobalt); cursor: pointer; padding: 2px 0; font-size: 14px; }
+  .linkish:hover { text-decoration: underline; }
+
+  .codeview {
+    margin: 12px 18px 18px;
+    border: 1px solid var(--rule); border-radius: 8px;
+    background: var(--sunken);
+    font: 14px/1.65 var(--mono);
+    color: var(--code);
+    overflow: auto;
+    max-height: 70vh;
+  }
+  .codeline { display: grid; grid-template-columns: 44px 58px minmax(0, 1fr); }
+  .codeline .no { text-align: right; padding-right: 10px; color: var(--muted); user-select: none; }
+  .codeline .mark { position: relative; user-select: none; font-size: 11.5px; color: var(--muted); }
+  .codeline .txt { white-space: pre-wrap; overflow-wrap: anywhere; padding-left: 2ch; text-indent: -2ch; padding-right: 16px; }
+  .codeline.ran .no { color: var(--ink); }
+  .codeline.suspect .txt { background: color-mix(in srgb, var(--fault-soft) 70%, transparent); }
+  .codeline.fault .txt { background: var(--fault-soft); }
+  .codeline.fault .no { color: var(--fault); font-weight: 500; }
+  .codeline.cursor .txt { background: var(--amber-soft); }
+  .codeline.cursor .no { color: var(--amber); font-weight: 500; }
+  .bar {
+    position: absolute; left: 4px; top: 50%; height: 6px; margin-top: -3px;
+    border-radius: 3px; background: var(--fault);
+  }
+  .bar.weak { opacity: 0.45; }
+  .cursor-mark { position: absolute; left: 6px; color: var(--amber); font-weight: 600; }
+  .codeview-empty { padding: 28px 18px; color: var(--muted); font-family: var(--sans); }
+
+  textarea.editor {
+    display: block; width: calc(100% - 36px); margin: 12px 18px 18px;
+    min-height: 420px; resize: vertical;
+    padding: 12px 14px;
+    border: 1px solid var(--cobalt); border-radius: 8px;
+    background: var(--sunken); color: var(--code);
+    font: 14px/1.65 var(--mono); tab-size: 4;
+  }
+  .pathform { padding: 14px 18px 18px; display: grid; gap: 12px; }
+  .field label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+  .field .hint { color: var(--muted); font-weight: 400; }
+  .field input {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px;
+    background: var(--sunken); font-family: var(--mono); font-size: 13.5px;
+  }
+
+  /* ── steps (capabilities) ───────────────────────────────── */
+  .steps { display: flex; gap: 0; padding: 0 10px; border-bottom: 1px solid var(--rule); overflow-x: auto; }
+  .step {
+    border: none; background: none; cursor: pointer;
+    padding: 14px 14px 12px; border-bottom: 3px solid transparent;
+    text-align: left; white-space: nowrap;
+  }
+  .step b { display: block; font-size: 15px; font-weight: 600; }
+  .step span { display: block; color: var(--muted); font-size: 13px; }
+  .step[aria-selected="true"] { border-bottom-color: var(--cobalt); }
+  .step[aria-selected="true"] b { color: var(--cobalt); }
+
+  .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .primary {
+    background: var(--cobalt); color: #fff; border: none;
+    padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer;
+  }
+  .primary:disabled { opacity: 0.55; cursor: progress; }
+  .secondary {
+    background: var(--panel); border: 1px solid var(--rule);
+    padding: 8px 12px; border-radius: 8px; cursor: pointer;
+  }
+  .secondary:disabled { opacity: 0.45; cursor: default; }
+  .actions select {
+    padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--panel); max-width: 100%;
+  }
+  .actions label { font-size: 14px; color: var(--muted); }
+  .explain { color: var(--muted); margin: 0 0 14px; max-width: 72ch; }
+
+  /* job log: the contract, as it happens */
+  .joblog {
+    margin-top: 16px; padding: 10px 12px;
+    border-left: 3px solid var(--rule);
+    font: 13px/1.6 var(--mono); color: var(--muted);
+  }
+  .joblog div.done { color: var(--clean); }
+  .joblog div.bad { color: var(--fault); }
+
+  /* results */
+  .result { margin-top: 18px; }
+  .verdict {
+    display: flex; gap: 14px; align-items: flex-start;
+    padding: 14px 16px; border-radius: 8px;
+  }
+  .verdict.defect { background: var(--fault-soft); }
+  .verdict.clean { background: var(--clean-soft); }
+  .verdict.other { background: var(--sunken); }
+  .verdict .big { font-size: 22px; font-weight: 600; line-height: 1.25; }
+  .verdict.defect .big { color: var(--fault); }
+  .verdict.clean .big { color: var(--clean); }
+  .verdict p { margin: 4px 0 0; color: var(--ink); }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th { text-align: left; font-weight: 500; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--rule); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  td code { font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+  .tablewrap { overflow-x: auto; }
+  .conf { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+  .conf .track { flex: 1; height: 6px; border-radius: 3px; background: var(--sunken); overflow: hidden; }
+  .conf .fill { height: 100%; background: var(--fault); }
+  .role { font-size: 13px; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .metric { background: var(--sunken); border-radius: 8px; padding: 10px 12px; }
+  .metric .v { font-size: 22px; font-weight: 600; }
+  .metric .k { color: var(--muted); font-size: 13px; }
+  .prose { max-width: 75ch; }
+  .handoff {
+    background: var(--sunken); border-radius: 8px; padding: 12px 14px;
+    font: 12.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word;
+    max-height: 320px; overflow: auto;
+  }
+  .callout { padding: 12px 14px; border-radius: 8px; background: var(--fault-soft); }
+  .callout b { color: var(--fault); }
+  tr.gap td { background: var(--amber-soft); }
+  tr.sub td { background: color-mix(in srgb, var(--amber-soft) 50%, transparent); }
+  td.empty { color: var(--muted); font-style: italic; }
+  tr.now td { background: var(--amber-soft); }
+
+  .replaybar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+  .position { font-size: 15px; font-weight: 600; margin-left: 6px; }
+
+  details.raw { margin-top: 22px; border-top: 1px solid var(--rule); padding-top: 12px; }
+  details.raw summary { cursor: pointer; color: var(--cobalt); font-size: 14px; }
+  details.raw h4 { font-size: 13px; font-weight: 500; color: var(--muted); margin: 12px 0 4px; }
+  details.raw pre {
+    margin: 0; background: var(--sunken); border-radius: 8px; padding: 10px 12px;
+    font-size: 12.5px; line-height: 1.5; max-height: 360px; overflow: auto; white-space: pre;
+  }
+  .hidden { display: none !important; }
+  @media (prefers-reduced-motion: no-preference) {
+    .codeline.cursor .txt { transition: background-color 0.25s; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>KIO2 Playground</h1>
+  <span class="tagline">Record a Python run once, then find, explain, replay and compare its failure.</span>
+  <span class="spacer"></span>
+  <div class="service">
+    <span id="svcDot" class="dot" aria-hidden="true"></span>
+    <span id="svcText" aria-live="polite">Checking KIO2</span>
+    <label for="baseUrl" class="hidden">KIO2 address</label>
+    <input id="baseUrl" spellcheck="false" title="KIO2 address" />
+  </div>
+</header>
+
+<main>
+  <!-- ── the program ─────────────────────────────────────── -->
+  <section class="panel" aria-labelledby="programTitle">
+    <div class="panel-head">
+      <h2 id="programTitle">Program</h2>
+      <div class="sources" role="group" aria-label="Program source" id="sources"></div>
+    </div>
+    <div class="program-meta">
+      <span class="file" id="fileName"></span>
+      <span class="note" id="fileNote"></span>
+      <span class="spacer"></span>
+      <button class="linkish" id="editBtn" type="button">Edit code</button>
+    </div>
+    <div id="codeArea"></div>
+    <div id="pathArea" class="pathform hidden">
+      <p class="explain" style="margin:0">KIO2 reads these paths on the machine it runs on. Source is not shown in this mode; results list the lines.</p>
+      <div class="field">
+        <label for="repoPath">Repository folder</label>
+        <input id="repoPath" spellcheck="false" placeholder="C:/code/my-project" />
+      </div>
+      <div class="field">
+        <label for="entryPoint">Script to run <span class="hint">relative to the folder</span></label>
+        <input id="entryPoint" spellcheck="false" placeholder="main.py" />
+      </div>
+    </div>
+  </section>
+
+  <!-- ── the capabilities ────────────────────────────────── -->
+  <section class="panel" aria-label="Analysis">
+    <div class="steps" role="tablist" id="steps">
+      <button class="step" role="tab" data-tab="locate" aria-selected="true"><b>Locate</b><span>Where is the fault?</span></button>
+      <button class="step" role="tab" data-tab="diagnose" aria-selected="false"><b>Diagnose</b><span>Why did it fail?</span></button>
+      <button class="step" role="tab" data-tab="replay" aria-selected="false"><b>Replay</b><span>Step through the recording</span></button>
+      <button class="step" role="tab" data-tab="compare" aria-selected="false"><b>Compare</b><span>How do two runs differ?</span></button>
+    </div>
+
+    <div class="panel-body">
+      <!-- Locate -->
+      <div data-pane="locate" role="tabpanel">
+        <p class="explain">KIO2 runs the program, records every executed line, and works back from the error to the lines that caused it.</p>
+        <div class="actions">
+          <button class="primary" id="locateBtn" type="button">Find the fault</button>
+        </div>
+        <div id="locateLog" class="joblog hidden" aria-live="polite"></div>
+        <div id="locateOut" class="result"></div>
+      </div>
+
+      <!-- Diagnose -->
+      <div data-pane="diagnose" role="tabpanel" class="hidden">
+        <p class="explain">The same recording, told as a cause: what failed, with which values, and which statements produced them. This text is what a repair agent (KIO7) receives.</p>
+        <div class="actions">
+          <button class="primary" id="diagnoseBtn" type="button">Explain the failure</button>
+          <label for="refSelect">Compare with a passing run</label>
+          <select id="refSelect"></select>
+        </div>
+        <div id="diagnoseLog" class="joblog hidden" aria-live="polite"></div>
+        <div id="diagnoseOut" class="result"></div>
+      </div>
+
+      <!-- Replay -->
+      <div data-pane="replay" role="tabpanel" class="hidden">
+        <p class="explain">Replay opens a recording without running the program again. Move through it like a debugger, backwards too, and read the values at every step.</p>
+        <div class="actions">
+          <label for="replaySelect">Recording</label>
+          <select id="replaySelect"></select>
+          <button class="primary" id="replayBtn" type="button">Open at the failure</button>
+        </div>
+        <div class="replaybar hidden" id="replayBar">
+          <button class="secondary" data-move="start" type="button">First step</button>
+          <button class="secondary" data-move="back" type="button">Step back</button>
+          <button class="secondary" data-move="forward" type="button">Step forward</button>
+          <button class="secondary" data-move="out" type="button">Back to the caller</button>
+          <button class="secondary" data-move="failure" type="button">Go to the failure</button>
+          <span class="position" id="replayPos" aria-live="polite"></span>
+        </div>
+        <div id="replayLog" class="joblog hidden" aria-live="polite"></div>
+        <div id="replayOut" class="result"></div>
+      </div>
+
+      <!-- Compare -->
+      <div data-pane="compare" role="tabpanel" class="hidden">
+        <p class="explain">Alignment lines up two recordings step by step and shows where their paths split. Typical use: the failing run against the corrected one.</p>
+        <div class="actions">
+          <label for="cmpA">Run A</label>
+          <select id="cmpA"></select>
+          <label for="cmpB">Run B</label>
+          <select id="cmpB"></select>
+          <button class="primary" id="compareBtn" type="button">Compare the runs</button>
+        </div>
+        <div id="compareLog" class="joblog hidden" aria-live="polite"></div>
+        <div id="compareOut" class="result"></div>
+      </div>
+
+      <details class="raw" id="raw">
+        <summary>Show request and reply (JSON)</summary>
+        <div id="rawBody"><p class="explain" style="margin-top:10px">Run a step to see the exact messages exchanged with KIO2.</p></div>
+      </details>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  // ── state ─────────────────────────────────────────────────────────────
+  var S = {
+    examples: [],
+    snippetsEnabled: false,
+    source: "example",          // example | own | path
+    exampleIndex: 0,
+    code: "",                   // the editor's text
+    edited: false,
+    editing: false,
+    tab: "locate",
+    recordings: [],             // {id, label, code, verdict, traceRef}
+    results: {},                // per tab: {code, marks}
+    replay: null,               // {rec, view}
+    workflow: "wf-playground-" + Math.random().toString(36).slice(2, 8),
+    counter: 0,
+    lastExchange: {}            // per tab: [{title, request, reply}]
+  };
+  var OWN_TEMPLATE = "# Paste a Python program here. It runs on the KIO2 machine.\n\n" +
+    "def main():\n    values = []\n    return sum(values) / len(values)\n\n\nif __name__ == \"__main__\":\n    main()\n";
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function el(html) { var t = document.createElement("template"); t.innerHTML = html.trim(); return t.content; }
+  function base() { return $("baseUrl").value.replace(/\/+$/, ""); }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  // ── service ───────────────────────────────────────────────────────────
+  $("baseUrl").value = location.protocol.indexOf("http") === 0 ? location.origin : "http://127.0.0.1:8102";
+  function setService(state, text) {
+    $("svcDot").className = "dot" + (state ? " " + state : "");
+    $("svcText").textContent = text;
+  }
+  async function connect() {
+    setService(null, "Checking KIO2");
+    try {
+      var h = await (await fetch(base() + "/health")).json();
+      if (h.status !== "ok") throw new Error();
+      var ex = await (await fetch(base() + "/playground/examples")).json();
+      S.examples = ex.examples || [];
+      S.snippetsEnabled = !!ex.snippets_enabled;
+      setService("ok", "KIO2 is running");
+      if (S.source === "example" && !S.edited) loadExample(S.exampleIndex);
+      renderSources();
+    } catch (e) {
+      setService("err", "KIO2 is not reachable at this address");
+    }
+  }
+  $("baseUrl").addEventListener("change", connect);
+
+  // ── job contract: POST /jobs, then poll GET /jobs/{job_id} ────────────
+  async function runJob(tab, title, capability, data, task) {
+    var log = $(tab + "Log");
+    log.classList.remove("hidden");
+    function line(text, cls) {
+      var d = document.createElement("div");
+      if (cls) d.className = cls;
+      d.textContent = text;
+      log.appendChild(d);
+      return d;
+    }
+    var request = {
+      schema_version: "1.0",
+      workflow_id: S.workflow,
+      step_id: capability + "-" + (++S.counter),
+      capability: capability,
+      task: task,
+      data: data
+    };
+    var t0 = performance.now();
+    line("POST /jobs   capability: " + capability);
+    var res = await fetch(base() + "/jobs", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request)
+    });
+    var ack = await res.json();
+    if (!res.ok) {
+      line("Refused: " + (ack.detail || res.status), "bad");
+      throw new Error(ack.detail || "request refused");
+    }
+    line("accepted   job_id: " + ack.job_id);
+    var poll = line("");
+    var reply = ack, n = 0, wait = 250;
+    while (reply.status === "accepted" && n < 600) {
+      await sleep(wait);
+      wait = Math.min(1000, wait + 125);
+      n++;
+      reply = await (await fetch(base() + "/jobs/" + encodeURIComponent(ack.job_id))).json();
+      poll.textContent = "GET /jobs/" + ack.job_id + "   " + reply.status + " (" + n + ")";
+    }
+    var secs = ((performance.now() - t0) / 1000).toFixed(1);
+    line(reply.status + " after " + secs + " s", reply.status === "success" ? "done" : "bad");
+    pushExchange(tab, title, request, reply);
+    return reply;
+  }
+  function pushExchange(tab, title, request, reply) {
+    var list = S.lastExchange[tab] = S.lastExchange[tab] || [];
+    if (list.length && list[0].fresh) list.length = 0;
+    list.push({ title: title, request: request, reply: reply });
+    renderRaw();
+  }
+  // A new user action: clear its job log and the messages shown for it.
+  function startExchange(tab) {
+    S.lastExchange[tab] = [{ fresh: true }];
+    $(tab + "Log").innerHTML = "";
+  }
+  function renderRaw() {
+    var list = (S.lastExchange[S.tab] || []).filter(function (x) { return !x.fresh; });
+    if (!list.length) {
+      $("rawBody").innerHTML = '<p class="explain" style="margin-top:10px">Run a step to see the exact messages exchanged with KIO2.</p>';
+      return;
+    }
+    $("rawBody").innerHTML = list.map(function (x) {
+      return (list.length > 1 ? "<h3>" + esc(x.title) + "</h3>" : "") +
+        "<h4>POST /jobs</h4><pre>" + esc(JSON.stringify(x.request, null, 2)) + "</pre>" +
+        "<h4>GET /jobs/{job_id}, final reply</h4><pre>" + esc(JSON.stringify(x.reply, null, 2)) + "</pre>";
+    }).join("");
+  }
+
+  // ── the program ───────────────────────────────────────────────────────
+  function currentFile() {
+    if (S.source === "example") return (S.examples[S.exampleIndex] || {}).name || "";
+    if (S.source === "own") return "main.py";
+    return $("entryPoint").value.trim();
+  }
+  function renderSources() {
+    var items = S.examples.map(function (ex, i) {
+      return { key: "example:" + i, label: ex.title, pressed: S.source === "example" && S.exampleIndex === i };
+    });
+    items.push({ key: "own", label: "Your code", pressed: S.source === "own" });
+    items.push({ key: "path", label: "Server path", pressed: S.source === "path" });
+    $("sources").innerHTML = items.map(function (it) {
+      return '<button class="chip" type="button" data-src="' + it.key + '" aria-pressed="' + it.pressed + '">' + esc(it.label) + "</button>";
+    }).join("");
+    renderProgram();
+  }
+  $("sources").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-src]");
+    if (!b) return;
+    var key = b.getAttribute("data-src");
+    if (key.indexOf("example:") === 0) {
+      S.source = "example";
+      loadExample(Number(key.slice(8)));
+    } else if (key === "own") {
+      if (S.source !== "own") { S.code = OWN_TEMPLATE; S.edited = true; }
+      S.source = "own";
+      S.editing = true;
+    } else {
+      S.source = "path";
+      S.editing = false;
+    }
+    renderSources();
+  });
+  function loadExample(i) {
+    S.exampleIndex = i;
+    S.code = (S.examples[i] || {}).code || "";
+    S.edited = false;
+    S.editing = false;
+  }
+  $("editBtn").addEventListener("click", function () {
+    S.editing = !S.editing;
+    renderProgram();
+    if (S.editing) $("editor").focus();
+  });
+
+  function renderProgram() {
+    var isPath = S.source === "path";
+    $("pathArea").classList.toggle("hidden", !isPath);
+    $("codeArea").classList.toggle("hidden", isPath);
+    $("editBtn").classList.toggle("hidden", isPath);
+    $("fileName").textContent = isPath ? "" : currentFile();
+    $("fileNote").textContent = noteText();
+    $("editBtn").textContent = S.editing ? "Done editing" : "Edit code";
+    if (isPath) return;
+    if (S.editing) {
+      $("codeArea").innerHTML = '<label for="editor" class="hidden">Program source</label><textarea id="editor" class="editor" spellcheck="false"></textarea>';
+      var ed = $("editor");
+      ed.value = S.code;
+      ed.addEventListener("input", function () {
+        S.code = ed.value;
+        if (!S.edited) { S.edited = true; $("fileNote").textContent = noteText(); }
+      });
+      ed.addEventListener("keydown", function (e) {
+        if (e.key === "Tab" && !e.shiftKey) {
+          e.preventDefault();
+          var s = ed.selectionStart;
+          ed.setRangeText("    ", s, ed.selectionEnd, "end");
+          S.code = ed.value; S.edited = true;
+        }
+      });
+      return;
+    }
+    renderCode();
+  }
+
+  function noteText() {
+    if (S.source === "path") return "";
+    if ((S.edited || S.source === "own") && !S.snippetsEnabled) {
+      return "Running edited code is off. Start KIO2 with KIO2_PLAYGROUND_SNIPPETS=1 to enable it.";
+    }
+    if (S.source === "own") return "Your program";
+    return S.edited ? "Edited, runs as a copy" : (S.examples[S.exampleIndex] || {}).description || "";
+  }
+
+  // The code view shows what the active step is about: the run's own source
+  // with its marks, or the program as it stands when nothing ran yet.
+  function renderCode() {
+    if (S.source === "path" || S.editing) return;
+    var r = S.results[S.tab];
+    var code = r && r.code != null ? r.code : (r && r.code === null ? null : S.code);
+    if (code === null) {
+      $("codeArea").innerHTML = '<div class="codeview"><div class="codeview-empty">This run used a server path, so its source is not shown. The lines are listed on the right.</div></div>';
+      return;
+    }
+    var marks = (r && r.marks) || {};
+    var lines = code.replace(/\r\n/g, "\n").split("\n");
+    if (lines.length && lines[lines.length - 1] === "") lines.pop();
+    var html = lines.map(function (txt, i) {
+      var n = i + 1, m = marks[n] || {}, cls = "codeline";
+      if (m.ran) cls += " ran";
+      if (m.suspect) cls += " suspect";
+      if (m.fault) cls += " fault";
+      if (m.cursor) cls += " cursor";
+      var mark = "";
+      if (m.conf != null) {
+        mark = '<span class="bar' + (m.fault ? "" : " weak") + '" style="width:' + Math.max(6, Math.round(m.conf * 46)) + 'px" title="confidence ' + m.conf + '"></span>';
+      }
+      if (m.cursor) mark = '<span class="cursor-mark" aria-label="replay position">&#9654;</span>';
+      return '<div class="codeline ' + cls.slice(9) + '" data-line="' + n + '"><span class="no">' + n + '</span><span class="mark">' + mark + '</span><span class="txt">' + esc(txt) + "</span></div>";
+    }).join("");
+    $("codeArea").innerHTML = '<div class="codeview" id="codeview">' + html + "</div>";
+    var focus = Object.keys(marks).filter(function (k) { return marks[k].cursor || marks[k].fault; })[0];
+    if (focus) {
+      var row = $("codeview").querySelector('[data-line="' + focus + '"]');
+      if (row) row.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  function fileUri(path) {
+    var p = path.replace(/\\/g, "/");
+    if (/^[A-Za-z]:/.test(p)) p = "/" + p;
+    return "file://" + encodeURI(p);
+  }
+  // The `data` a job needs for the current program, and the source to show beside its results.
+  async function programData() {
+    if (S.source === "path") {
+      var repo = $("repoPath").value.trim(), entry = $("entryPoint").value.trim();
+      if (!repo || !entry) throw new Error("Fill in the repository folder and the script to run.");
+      var sep = /[\\/]$/.test(repo) ? "" : "/";
+      return { data: { repository: { uri: fileUri(repo) }, entry_point: { uri: fileUri(repo + sep + entry) } }, code: null, label: entry };
+    }
+    var ex = S.examples[S.exampleIndex];
+    if (S.source === "example" && !S.edited && ex) {
+      return { data: ex.data, code: S.code, label: ex.name };
+    }
+    if (!S.snippetsEnabled) {
+      throw new Error("Running edited code is off. Start KIO2 with KIO2_PLAYGROUND_SNIPPETS=1 on a machine you trust, or reload the example.");
+    }
+    var name = S.source === "example" && ex ? ex.name : "main.py";
+    var res = await fetch(base() + "/playground/snippets", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code: S.code, filename: name })
+    });
+    var body = await res.json();
+    if (!res.ok) throw new Error(body.detail || "The code could not be stored.");
+    return { data: body, code: S.code, label: name + (S.source === "example" ? " (edited)" : "") };
+  }
+
+  // ── recordings ────────────────────────────────────────────────────────
+  function addRecording(prog, out) {
+    if (!out || !out.trace_ref) return null;
+    var rec = {
+      id: S.recordings.length + 1,
+      label: "Run " + (S.recordings.length + 1) + ": " + prog.label + " (" + out.verdict + ")",
+      code: prog.code, verdict: out.verdict, traceRef: out.trace_ref
+    };
+    S.recordings.push(rec);
+    renderRecordingPickers();
+    return rec;
+  }
+  function options(list, selected, empty) {
+    if (!list.length) return '<option value="">' + esc(empty) + "</option>";
+    return list.map(function (r) {
+      return '<option value="' + r.id + '"' + (r.id === selected ? " selected" : "") + ">" + esc(r.label) + "</option>";
+    }).join("");
+  }
+  function pick(id) { return S.recordings.filter(function (r) { return r.id === Number(id); })[0]; }
+  function latest(pred) { return S.recordings.slice().reverse().filter(pred)[0]; }
+  function renderRecordingPickers() {
+    var all = S.recordings;
+    var clean = all.filter(function (r) { return r.verdict === "clean"; });
+    $("refSelect").innerHTML = '<option value="">No, this run only</option>' + clean.map(function (r) {
+      return '<option value="' + r.id + '">' + esc(r.label) + "</option>";
+    }).join("");
+    var lastAny = all[all.length - 1];
+    $("replaySelect").innerHTML = options(all, lastAny && lastAny.id, "Run Locate or Diagnose first");
+    var a = latest(function (r) { return r.verdict === "defect"; }) || all[0];
+    var b = latest(function (r) { return r.verdict === "clean" && r !== a; }) || all.filter(function (r) { return r !== a; }).slice(-1)[0];
+    $("cmpA").innerHTML = options(all, a && a.id, "No recordings yet");
+    $("cmpB").innerHTML = options(all, b && b.id, "No recordings yet");
+  }
+
+  // ── tabs ──────────────────────────────────────────────────────────────
+  $("steps").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-tab]");
+    if (b) showTab(b.getAttribute("data-tab"));
+  });
+  function showTab(tab) {
+    S.tab = tab;
+    document.querySelectorAll(".step").forEach(function (b) {
+      b.setAttribute("aria-selected", String(b.getAttribute("data-tab") === tab));
+    });
+    document.querySelectorAll("[data-pane]").forEach(function (p) {
+      p.classList.toggle("hidden", p.getAttribute("data-pane") !== tab);
+    });
+    renderRaw();
+    renderCode();
+  }
+
+  async function guarded(btn, tab, fn) {
+    btn.disabled = true;
+    try { await fn(); }
+    catch (e) {
+      $(tab + "Out").innerHTML = '<div class="callout"><b>Could not run this step.</b> ' + esc(e.message || e) + "</div>";
+    } finally { btn.disabled = false; }
+  }
+  function failure(reply) {
+    var d = reply.diagnostics || {};
+    return '<div class="callout"><b>' + esc(reply.failure_class || reply.status) + ".</b> " + esc(d.message || "") + "</div>";
+  }
+  function lineOf(text) { var m = /:(\d+)/.exec(text || ""); return m ? Number(m[1]) : null; }
+
+  // ── Locate ────────────────────────────────────────────────────────────
+  var ROLE = { criterion: "Failing statement", data: "Feeds it data", control: "Decides whether it runs" };
+  $("locateBtn").addEventListener("click", function () {
+    guarded($("locateBtn"), "locate", async function () {
+      S.editing = false; renderProgram();
+      $("locateOut").innerHTML = "";
+      startExchange("locate");
+      var prog = await programData();
+      var reply = await runJob("locate", "Locate", "bug_localization", prog.data, "Find the fault");
+      if (reply.status !== "success") { $("locateOut").innerHTML = failure(reply); return; }
+      var out = reply.output;
+      var rec = addRecording(prog, out);
+      var marks = {};
+      (out.findings || []).forEach(function (f, i) {
+        var m = marks[f.line] = marks[f.line] || {};
+        m.suspect = true;
+        m.conf = Math.max(m.conf || 0, f.confidence);
+        if (i === 0 || f.dependency === "criterion") m.fault = true;
+      });
+      S.results.locate = { code: prog.code, marks: marks };
+      renderCode();
+      $("locateOut").innerHTML = renderVerdict(out) + renderFindings(out) + renderState(out.crash_state, "Variables when it failed") + traceLink(out, rec);
+    });
+  });
+  function renderVerdict(out) {
+    var top = (out.findings || [])[0];
+    if (out.verdict === "defect") {
+      return '<div class="verdict defect"><div><div class="big">Fault at line ' + (top ? top.line : "?") + (top ? ", in " + esc(top.function) + "()" : "") + "</div>" +
+        "<p>" + esc(out.summary) + " Confidence " + esc(out.confidence) + ".</p></div></div>";
+    }
+    if (out.verdict === "clean") {
+      return '<div class="verdict clean"><div><div class="big">No fault: the program ran to completion</div><p>' + esc(out.summary) + "</p></div></div>";
+    }
+    return '<div class="verdict other"><div><div class="big">' + esc(out.verdict) + "</div><p>" + esc(out.summary) + "</p></div></div>";
+  }
+  function renderFindings(out) {
+    var f = out.findings || [];
+    if (!f.length) return "";
+    return "<h3>Suspect lines, most likely first</h3><div class=\"tablewrap\"><table><tr><th>Line</th><th>Role</th><th>Confidence</th><th>Statement</th></tr>" +
+      f.map(function (x) {
+        return "<tr><td>" + x.line + "<br><span class=\"role\" style=\"color:var(--muted)\">" + esc(x.function) + "()</span></td><td class=\"role\">" + esc(ROLE[x.dependency] || x.dependency) +
+          '</td><td><div class="conf"><div class="track"><div class="fill" style="width:' + Math.round(x.confidence * 100) + '%"></div></div>' + x.confidence + "</div></td><td><code>" + esc(x.description) + "</code></td></tr>";
+      }).join("") + "</table></div>";
+  }
+  function renderState(state, title) {
+    var names = Object.keys(state || {});
+    if (!names.length) return "";
+    return "<h3>" + esc(title) + "</h3><div class=\"tablewrap\"><table>" + names.map(function (n) {
+      var v = state[n] && typeof state[n] === "object" && "value" in state[n] ? state[n].value : state[n];
+      return "<tr><td style=\"width:28%\"><code>" + esc(n) + "</code></td><td><code>" + esc(v) + "</code></td></tr>";
+    }).join("") + "</table></div>";
+  }
+  function traceLink(out, rec) {
+    if (!out.trace_url) return "";
+    return '<h3>Recording</h3><p class="prose">Saved as <b>' + esc(rec ? "Run " + rec.id : "a recording") +
+      '</b>. Replay and Compare use it without running the program again. <a href="' + esc(base() + out.trace_url) + '" target="_blank" rel="noopener">Open the recording as XML</a></p>';
+  }
+
+  // ── Diagnose ──────────────────────────────────────────────────────────
+  var EVIDENCE = { recorded_value: "Recorded value", divergence: "Path difference", value_difference: "Value difference" };
+  $("diagnoseBtn").addEventListener("click", function () {
+    guarded($("diagnoseBtn"), "diagnose", async function () {
+      S.editing = false; renderProgram();
+      $("diagnoseOut").innerHTML = "";
+      startExchange("diagnose");
+      var prog = await programData();
+      var data = Object.assign({}, prog.data);
+      var ref = pick($("refSelect").value);
+      if (ref) data.reference_trace = { uri: ref.traceRef };
+      var reply = await runJob("diagnose", "Diagnose", "diagnosis", data, "Explain the failure");
+      if (reply.status !== "success") { $("diagnoseOut").innerHTML = failure(reply); return; }
+      var out = reply.output;
+      var rec = addRecording(prog, out);
+      var marks = {};
+      var crit = null;
+      (out.slice_context || "").split("\n").forEach(function (l) {
+        var m = /^\s*L(\d+)\s/.exec(l);
+        if (!m) return;
+        var n = Number(m[1]);
+        marks[n] = marks[n] || {};
+        marks[n].suspect = true;
+        if (l.indexOf("<-- CRITERION") >= 0) { marks[n].fault = true; crit = n; }
+      });
+      S.results.diagnose = { code: prog.code, marks: marks };
+      renderCode();
+      var ev = out.evidence || [];
+      var html = renderVerdict({ verdict: out.verdict, summary: out.summary, confidence: out.confidence, findings: crit ? [{ line: crit, function: (out.summary.match(/\(([^)]+)\)/) || [])[1] || "" }] : [] });
+      html += "<h3>Root cause</h3><p class=\"prose\">" + esc(out.root_cause) + "</p>";
+      if (ev.length) {
+        html += "<h3>Evidence" + (out.compared_runs > 1 ? ", including the passing run" : "") + "</h3><div class=\"tablewrap\"><table><tr><th>Kind</th><th>Where</th><th>Detail</th></tr>" +
+          ev.map(function (x) {
+            return "<tr><td>" + esc(EVIDENCE[x.kind] || x.kind) + "</td><td>" + esc(x.at || "") + "</td><td><code>" + esc(x.detail) + "</code></td></tr>";
+          }).join("") + "</table></div>";
+      }
+      if (out.slice_context) {
+        html += "<h3>Hand-off to the repair agent (KIO7)</h3><div class=\"handoff\">" + esc(out.slice_context) + "</div>";
+      }
+      html += traceLink(out, rec);
+      $("diagnoseOut").innerHTML = html;
+    });
+  });
+
+  // ── Replay ────────────────────────────────────────────────────────────
+  async function replayTo(cursor, title) {
+    var rec = S.replay ? S.replay.rec : pick($("replaySelect").value);
+    if (!rec) throw new Error("Run Locate or Diagnose first: replay needs a recording.");
+    var data = Object.assign({ trace: { uri: rec.traceRef }, window: 3 }, cursor);
+    var reply = await runJob("replay", title, "replay", data, "Step through the recording");
+    if (reply.status !== "success") { $("replayOut").innerHTML = failure(reply); return; }
+    S.replay = { rec: rec, view: reply.output };
+    renderReplay();
+  }
+  function renderReplay() {
+    var v = S.replay.view, cur = v.current || {};
+    var marks = {};
+    (v.timeline || []).forEach(function (t) { marks[t.line] = marks[t.line] || {}; marks[t.line].ran = true; });
+    if (cur.line) { marks[cur.line] = marks[cur.line] || {}; marks[cur.line].cursor = true; }
+    S.results.replay = { code: S.replay.rec.code, marks: marks };
+    renderCode();
+    $("replayBar").classList.remove("hidden");
+    $("replayPos").textContent = "Step " + (v.cursor + 1) + " of " + v.total;
+    var bar = $("replayBar");
+    bar.querySelector('[data-move="back"]').disabled = !v.can_back;
+    bar.querySelector('[data-move="start"]').disabled = !v.can_back;
+    bar.querySelector('[data-move="forward"]').disabled = !v.can_forward;
+    var html = '<div class="verdict other"><div><div class="big">Line ' + esc(cur.line) + ", in " + esc(cur.function) + "()</div><p><code>" + esc(cur.source) + "</code></p></div></div>";
+    html += renderState(cur.state, "Values just before this line runs");
+    var tl = v.timeline || [];
+    if (tl.length) {
+      html += "<h3>Around this step</h3><div class=\"tablewrap\"><table><tr><th>Step</th><th>Line</th><th>Statement</th></tr>" +
+        tl.map(function (t) {
+          return "<tr" + (t.is_cursor ? ' class="now"' : "") + "><td>" + (t.seq + 1) + "</td><td>" + t.line + "</td><td><code>" + esc(t.source) + "</code></td></tr>";
+        }).join("") + "</table></div>";
+    }
+    $("replayOut").innerHTML = html;
+  }
+  $("replayBtn").addEventListener("click", function () {
+    guarded($("replayBtn"), "replay", async function () {
+      S.replay = null;
+      startExchange("replay");
+      await replayTo({ at_exception: true }, "Open at the failure");
+    });
+  });
+  $("replaySelect").addEventListener("change", function () { S.replay = null; });
+  $("replayBar").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-move]");
+    if (!b || !S.replay) return;
+    var seq = S.replay.view.cursor, move = b.getAttribute("data-move");
+    var cursor = {
+      start: { seq: 0 },
+      back: { seq: seq, step: -1 },
+      forward: { seq: seq, step: 1 },
+      out: { seq: seq, step_action: "out", back: true },
+      failure: { at_exception: true }
+    }[move];
+    guarded(b, "replay", async function () {
+      startExchange("replay");
+      await replayTo(cursor, b.textContent);
+    });
+  });
+
+  // ── Compare ───────────────────────────────────────────────────────────
+  async function fullTimeline(rec, label) {
+    var reply = await runJob("compare", "Read " + label, "replay", { trace: { uri: rec.traceRef }, seq: 0, window: 2000 }, "Read the recording");
+    if (reply.status !== "success") throw new Error("Could not read " + label + ".");
+    return reply.output.timeline || [];
+  }
+  $("compareBtn").addEventListener("click", function () {
+    guarded($("compareBtn"), "compare", async function () {
+      var a = pick($("cmpA").value), b = pick($("cmpB").value);
+      if (!a || !b) throw new Error("Compare needs two recordings: run Locate on the failing and the corrected example first.");
+      $("compareOut").innerHTML = "";
+      startExchange("compare");
+      var reply = await runJob("compare", "Align the runs", "trace_alignment",
+        { run_a: { uri: a.traceRef }, run_b: { uri: b.traceRef }, include_pairs: true }, "Compare the runs");
+      if (reply.status !== "success") { $("compareOut").innerHTML = failure(reply); return; }
+      var out = reply.output;
+      var ta = await fullTimeline(a, "run A"), tb = await fullTimeline(b, "run B");
+      S.results.compare = { code: a.code, marks: splitMarks(out, ta) };
+      renderCode();
+      $("compareOut").innerHTML = renderComparison(out, a, b, ta, tb);
+    });
+  });
+  // Run A's code: the lines it ran, and where the two paths split.
+  function splitMarks(out, ta) {
+    var marks = {};
+    ta.forEach(function (t) { marks[t.line] = marks[t.line] || {}; marks[t.line].ran = true; });
+    (out.divergences || []).forEach(function (d) {
+      var t = d.side === "a" ? ta[d.start] : (d.at == null ? null : ta[d.at]);
+      if (t) { marks[t.line] = marks[t.line] || {}; marks[t.line].cursor = true; }
+    });
+    return marks;
+  }
+  function step(t) { return t ? "line " + t.line : "?"; }
+  function renderComparison(out, a, b, ta, tb) {
+    var same = out.distance === 0;
+    var longer = Math.max(ta.length, tb.length) || 1;
+    var html = '<div class="verdict ' + (same ? "clean" : "other") + '"><div><div class="big">' +
+      (same ? "Both runs took the same path" : "The runs split after " + out.matched + " shared steps") + "</div><p>" +
+      esc(sentence(out, ta, tb)) + "</p></div></div>";
+    html += '<h3>In numbers</h3><div class="metrics">' +
+      metric(out.matched, "steps shared by both runs") +
+      metric(out.gaps, "steps that ran in only one") +
+      metric(out.distance, "edit distance between the paths") +
+      metric(Math.round(out.normalized_distance * 100) + "%", "of the longer run differs") + "</div>";
+    var pairs = out.pairs || [];
+    if (pairs.length) {
+      html += "<h3>Step by step</h3><div class=\"tablewrap\"><table><tr><th>A: " + esc(a.label) + "</th><th>B: " + esc(b.label) + "</th></tr>" +
+        pairs.map(function (p) {
+          var x = p[0] == null ? null : ta[p[0]], y = p[1] == null ? null : tb[p[1]];
+          var cls = !x || !y ? "gap" : (x.line !== y.line || x.function !== y.function ? "sub" : "");
+          return "<tr" + (cls ? ' class="' + cls + '"' : "") + ">" + cell(x, "did not run") + cell(y, "did not run") + "</tr>";
+        }).join("") + "</table></div>";
+    }
+    if ((out.delta || []).length) {
+      html += "<h3>Values that differ at the first step</h3><div class=\"tablewrap\"><table><tr><th>Variable</th><th>Run A</th><th>Run B</th></tr>" +
+        out.delta.map(function (d) {
+          return "<tr><td><code>" + esc(d.name) + "</code></td><td><code>" + esc(d.a) + "</code></td><td><code>" + esc(d.b) + "</code></td></tr>";
+        }).join("") + "</table></div>";
+    }
+    return html;
+  }
+  function metric(v, k) { return '<div class="metric"><div class="v">' + esc(v) + '</div><div class="k">' + esc(k) + "</div></div>"; }
+  function cell(t, empty) {
+    if (!t) return '<td class="empty">' + esc(empty) + "</td>";
+    return "<td>" + t.line + " <code>" + esc(t.source) + "</code></td>";
+  }
+  function sentence(out, ta, tb) {
+    if (out.distance === 0) return "Every executed statement lines up. Any difference between them is in the values, not the path.";
+    return (out.divergences || []).map(function (d) {
+      var mine = d.side === "a" ? ta : tb, other = d.side === "a" ? tb : ta;
+      var who = d.side === "a" ? "Run A" : "Run B", them = d.side === "a" ? "run B" : "run A";
+      var first = mine[d.start], at = d.at == null ? null : other[d.at];
+      return who + " runs " + d.length + " step" + (d.length > 1 ? "s" : "") + " that " + them + " never reaches" +
+        (first ? ", starting at " + step(first) : "") + (at ? ", right after " + them + "'s " + step(at) : "") + ".";
+    }).join(" ");
+  }
+
+  // ── start ─────────────────────────────────────────────────────────────
+  renderRecordingPickers();
+  renderSources();
+  connect();
+})();
+</script>
+</body>
+</html>

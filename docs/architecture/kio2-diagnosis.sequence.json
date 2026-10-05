@@ -1,0 +1,230 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "KIO2 diagnosis of a failure",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [
+      1080,
+      664
+    ],
+    "legend": {
+      "entries": {
+        "dashed": {
+          "label": "optional step"
+        }
+      }
+    }
+  },
+  "participants": [
+    {
+      "id": "kio1",
+      "type": "external",
+      "label": "KIO1",
+      "sublabel": "orchestrator"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "KIO2 API",
+      "sublabel": "HTTP + job queue"
+    },
+    {
+      "id": "handler",
+      "type": "backend",
+      "label": "Task handler",
+      "sublabel": "builds the answer"
+    },
+    {
+      "id": "localizer",
+      "type": "backend",
+      "label": "Localizer",
+      "sublabel": "localizer.py"
+    },
+    {
+      "id": "engine",
+      "type": "cloud",
+      "label": "FocusTracer",
+      "sublabel": "tracing engine"
+    },
+    {
+      "id": "traces",
+      "type": "database",
+      "label": "Trace files",
+      "sublabel": "KIO2_TRACE_DIR"
+    }
+  ],
+  "segments": [
+    {
+      "from": 184,
+      "to": 348,
+      "label": "1. Record and slice, as in bug_localization"
+    },
+    {
+      "from": 358,
+      "to": 456,
+      "label": "2. Optional: compare with a passing run"
+    },
+    {
+      "from": 466,
+      "to": 564,
+      "label": "3. Answer"
+    }
+  ],
+  "messages": [
+    {
+      "id": "m-submit",
+      "from": "kio1",
+      "to": "api",
+      "y": 200,
+      "label": "POST /jobs: diagnosis",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m-start",
+      "from": "api",
+      "to": "handler",
+      "y": 232,
+      "label": "run diagnosis",
+      "variant": "emphasis"
+    },
+    {
+      "id": "m-localize",
+      "from": "handler",
+      "to": "localizer",
+      "y": 264,
+      "label": "localize()",
+      "variant": "default"
+    },
+    {
+      "id": "m-record",
+      "from": "localizer",
+      "to": "engine",
+      "y": 296,
+      "label": "record, slice",
+      "variant": "default"
+    },
+    {
+      "id": "m-slice-back",
+      "from": "localizer",
+      "to": "handler",
+      "y": 328,
+      "label": "lines, crash state",
+      "variant": "return"
+    },
+    {
+      "id": "m-compare",
+      "from": "handler",
+      "to": "engine",
+      "y": 374,
+      "label": "core.align: failing vs passing",
+      "variant": "dashed"
+    },
+    {
+      "id": "m-read",
+      "from": "engine",
+      "to": "traces",
+      "y": 406,
+      "label": "read both XML",
+      "variant": "dashed"
+    },
+    {
+      "id": "m-diff",
+      "from": "engine",
+      "to": "handler",
+      "y": 438,
+      "label": "divergences, value diffs",
+      "variant": "return"
+    },
+    {
+      "id": "m-answer",
+      "from": "handler",
+      "to": "api",
+      "y": 482,
+      "label": "root_cause, slice_context",
+      "variant": "return"
+    },
+    {
+      "id": "m-poll",
+      "from": "kio1",
+      "to": "api",
+      "y": 514,
+      "label": "GET /jobs/{job_id}",
+      "variant": "default"
+    },
+    {
+      "id": "m-final",
+      "from": "api",
+      "to": "kio1",
+      "y": 546,
+      "label": "success, diagnosis",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "api",
+      "from": 194,
+      "to": 240,
+      "type": "backend"
+    },
+    {
+      "participant": "handler",
+      "from": 226,
+      "to": 490,
+      "type": "backend"
+    },
+    {
+      "participant": "localizer",
+      "from": 258,
+      "to": 336,
+      "type": "backend"
+    },
+    {
+      "participant": "engine",
+      "from": 290,
+      "to": 304,
+      "type": "cloud"
+    },
+    {
+      "participant": "engine",
+      "from": 368,
+      "to": 446,
+      "type": "cloud"
+    },
+    {
+      "participant": "api",
+      "from": 508,
+      "to": 554,
+      "type": "backend"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "In",
+      "items": [
+        "repository and entry_point, as for bug_localization",
+        "reference_trace (optional): a recording of a passing run"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Out",
+      "items": [
+        "root_cause: the failing line, its values, and where they came from",
+        "slice_context: the annotated slice, for the fix step (KIO7)"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Good to know",
+      "items": [
+        "Built from the recording, no language model",
+        "Task handler: kio1_protocol.py; comparison: comparator.py"
+      ]
+    }
+  ]
+}

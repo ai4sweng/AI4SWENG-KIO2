@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "kio2-playground",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set KIO_PORT=8103&& set KIO2_PLAYGROUND_SNIPPETS=1&& python -m kio2.main"],
+      "port": 8103
+    },
+    {
+      "name": "docs-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8130", "--directory", "docs"],
+      "port": 8130
+    }
+  ]
+}

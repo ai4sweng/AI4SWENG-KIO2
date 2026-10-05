@@ -1,0 +1,27 @@
+services:
+  kio2:
+    build: .
+    container_name: ai4sweng-kio2
+    restart: unless-stopped
+    ports:
+      # Host:Container
+      - "8102:8102"
+    volumes:
+      # KIO2 runs INSIDE this container, so it can only trace code that is
+      # visible here — a host path like E:\...\your-repo means nothing to it.
+      # Mount the code you want to analyse and pass its CONTAINER-side path
+      # (e.g. /workspace/my-repo/main.py) as target_script/working_directory.
+      # Host side defaults to ./workspace in this repo; override by setting
+      # KIO2_WORKSPACE in a local .env file (see .env.example) — e.g.
+      # KIO2_WORKSPACE=../Trace/test-codes to mount a sibling checkout.
+      - ${KIO2_WORKSPACE:-./workspace}:/workspace:ro
+    environment:
+      - KIO_HOST=0.0.0.0
+      - KIO_PORT=8102
+      # Servisin ihtiyaç duyabileceği ek ortam değişkenleri buraya eklenebilir
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8102/health/')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

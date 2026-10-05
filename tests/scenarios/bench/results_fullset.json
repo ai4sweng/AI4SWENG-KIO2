@@ -1,0 +1,559 @@
+{
+ "record": [
+  {
+   "p": "01",
+   "ok": true,
+   "native": 10.9,
+   "traced": 187.5,
+   "lines": 11,
+   "bytes": 9050,
+   "bpl": 822.7,
+   "schema": "2.3"
+  },
+  {
+   "p": "02",
+   "ok": true,
+   "native": 11.1,
+   "traced": 186.9,
+   "lines": 2,
+   "bytes": 4132,
+   "bpl": 2066.0,
+   "schema": "2.3"
+  },
+  {
+   "p": "03",
+   "ok": true,
+   "native": 11.3,
+   "traced": 205.5,
+   "lines": 10,
+   "bytes": 9316,
+   "bpl": 931.6,
+   "schema": "2.3"
+  },
+  {
+   "p": "04",
+   "ok": true,
+   "native": 11.4,
+   "traced": 194.9,
+   "lines": 3,
+   "bytes": 3941,
+   "bpl": 1313.7,
+   "schema": "2.3"
+  },
+  {
+   "p": "05",
+   "ok": true,
+   "native": 12.2,
+   "traced": 194.4,
+   "lines": 14,
+   "bytes": 14267,
+   "bpl": 1019.1,
+   "schema": "2.3"
+  },
+  {
+   "p": "06",
+   "ok": true,
+   "native": 11.3,
+   "traced": 189.0,
+   "lines": 1,
+   "bytes": 3760,
+   "bpl": 3760.0,
+   "schema": "2.3"
+  },
+  {
+   "p": "07",
+   "ok": true,
+   "native": 11.6,
+   "traced": 223.7,
+   "lines": 200,
+   "bytes": 448333,
+   "bpl": 2241.7,
+   "schema": "2.3"
+  },
+  {
+   "p": "08",
+   "ok": true,
+   "native": 10.4,
+   "traced": 191.6,
+   "lines": 24,
+   "bytes": 22249,
+   "bpl": 927.0,
+   "schema": "2.3"
+  },
+  {
+   "p": "09",
+   "ok": true,
+   "native": 10.8,
+   "traced": 196.5,
+   "lines": 3,
+   "bytes": 3774,
+   "bpl": 1258.0,
+   "schema": "2.3"
+  },
+  {
+   "p": "10",
+   "ok": true,
+   "native": 10.9,
+   "traced": 188.1,
+   "lines": 12,
+   "bytes": 10137,
+   "bpl": 844.8,
+   "schema": "2.3"
+  },
+  {
+   "p": "11",
+   "ok": true,
+   "native": 11.1,
+   "traced": 191.3,
+   "lines": 2,
+   "bytes": 3944,
+   "bpl": 1972.0,
+   "schema": "2.3"
+  },
+  {
+   "p": "12",
+   "ok": true,
+   "native": 10.7,
+   "traced": 208.0,
+   "lines": 29,
+   "bytes": 24993,
+   "bpl": 861.8,
+   "schema": "2.3"
+  },
+  {
+   "p": "13",
+   "ok": true,
+   "native": 11.0,
+   "traced": 190.8,
+   "lines": 4,
+   "bytes": 4274,
+   "bpl": 1068.5,
+   "schema": "2.3"
+  },
+  {
+   "p": "14",
+   "ok": true,
+   "native": 11.3,
+   "traced": 197.7,
+   "lines": 17,
+   "bytes": 11512,
+   "bpl": 677.2,
+   "schema": "2.3"
+  },
+  {
+   "p": "15",
+   "ok": true,
+   "native": 11.3,
+   "traced": 181.0,
+   "lines": 6,
+   "bytes": 6527,
+   "bpl": 1087.8,
+   "schema": "2.3"
+  }
+ ],
+ "localize": [
+  {
+   "p": "01",
+   "fault": "statement moved out of the loop",
+   "start": "criterion 10:total",
+   "gt": 6,
+   "rank": 5,
+   "dep": "data",
+   "n": 6,
+   "conf": 0.85,
+   "ranking": [
+    [
+     1,
+     10,
+     "criterion",
+     1.0
+    ],
+    [
+     2,
+     7,
+     "control",
+     0.75
+    ],
+    [
+     3,
+     2,
+     "data",
+     0.5
+    ],
+    [
+     4,
+     3,
+     "data",
+     0.5
+    ],
+    [
+     5,
+     6,
+     "data",
+     0.5
+    ],
+    [
+     6,
+     9,
+     "data",
+     0.5
+    ]
+   ]
+  },
+  {
+   "p": "02",
+   "fault": "wrong dictionary key",
+   "start": "crash",
+   "gt": 4,
+   "rank": 1,
+   "dep": "criterion",
+   "n": 2,
+   "conf": 0.85,
+   "ranking": [
+    [
+     1,
+     4,
+     "criterion",
+     1.0
+    ],
+    [
+     2,
+     3,
+     "control",
+     0.75
+    ]
+   ]
+  },
+  {
+   "p": "04",
+   "fault": "inverted comparison",
+   "start": "criterion 5",
+   "gt": 3,
+   "rank": 2,
+   "dep": "control",
+   "n": 2,
+   "conf": 0.85,
+   "ranking": [
+    [
+     1,
+     5,
+     "criterion",
+     1.0
+    ],
+    [
+     2,
+     3,
+     "control",
+     0.75
+    ]
+   ]
+  },
+  {
+   "p": "05",
+   "fault": "release logic left empty",
+   "start": "crash",
+   "gt": 13,
+   "rank": null,
+   "dep": null,
+   "n": 2,
+   "conf": 0.85,
+   "ranking": [
+    [
+     1,
+     8,
+     "criterion",
+     1.0
+    ],
+    [
+     2,
+     7,
+     "control",
+     0.75
+    ]
+   ]
+  },
+  {
+   "p": "06",
+   "fault": "no type check before .strip()",
+   "start": "crash",
+   "gt": 4,
+   "rank": 1,
+   "dep": "criterion",
+   "n": 1,
+   "conf": 0.85,
+   "ranking": [
+    [
+     1,
+     4,
+     "criterion",
+     1.0
+    ]
+   ]
+  },
+  {
+   "p": "07",
+   "fault": "wrong recursion base case",
+   "start": "crash",
+   "gt": 4,
+   "rank": null,
+   "dep": null,
+   "n": 0,
+   "conf": 1.0,
+   "ranking": []
+  },
+  {
+   "p": "09",
+   "fault": "comparison operator reversed",
+   "start": "criterion 8",
+   "gt": 6,
+   "rank": null,
+   "dep": null,
+   "n": 1,
+   "conf": 0.85,
+   "ranking": [
+    [
+     1,
+     8,
+     "criterion",
+     1.0
+    ]
+   ]
+  },
+  {
+   "p": "10",
+   "fault": "off-by-one loop bound",
+   "start": "crash",
+   "gt": 5,
+   "rank": 2,
+   "dep": "data",
+   "n": 2,
+   "conf": 0.85,
+   "ranking": [
+    [
+     1,
+     6,
+     "criterion",
+     1.0
+    ],
+    [
+     2,
+     5,
+     "data",
+     0.5
+    ]
+   ]
+  },
+  {
+   "p": "11",
+   "fault": "assignment shadows the global",
+   "start": "crash",
+   "gt": 8,
+   "rank": null,
+   "dep": null,
+   "n": 2,
+   "conf": 0.85,
+   "ranking": [
+    [
+     1,
+     7,
+     "criterion",
+     1.0
+    ],
+    [
+     2,
+     6,
+     "control",
+     0.75
+    ]
+   ]
+  },
+  {
+   "p": "13",
+   "fault": "== used instead of =",
+   "start": "criterion 7:user_profile",
+   "gt": 5,
+   "rank": null,
+   "dep": null,
+   "n": 1,
+   "conf": 0.85,
+   "ranking": [
+    [
+     1,
+     7,
+     "criterion",
+     1.0
+    ]
+   ]
+  },
+  {
+   "p": "14",
+   "fault": "mutable default argument",
+   "start": "criterion 7:result_list",
+   "gt": 3,
+   "rank": null,
+   "dep": null,
+   "n": 1,
+   "conf": 0.85,
+   "ranking": [
+    [
+     1,
+     7,
+     "criterion",
+     1.0
+    ]
+   ]
+  },
+  {
+   "p": "15",
+   "fault": "dict mutated while iterating",
+   "start": "crash",
+   "gt": 6,
+   "rank": 1,
+   "dep": "criterion",
+   "n": 3,
+   "conf": 0.85,
+   "ranking": [
+    [
+     1,
+     6,
+     "criterion",
+     1.0
+    ],
+    [
+     2,
+     5,
+     "control",
+     0.75
+    ],
+    [
+     3,
+     4,
+     "data",
+     0.5
+    ]
+   ]
+  }
+ ],
+ "verdict": [
+  {
+   "p": "01",
+   "expect": "defect",
+   "verdict": "defect",
+   "n": 6,
+   "ok": true,
+   "status": "DONE"
+  },
+  {
+   "p": "02",
+   "expect": "defect",
+   "verdict": "defect",
+   "n": 2,
+   "ok": true,
+   "status": "DONE"
+  },
+  {
+   "p": "03",
+   "expect": "clean",
+   "verdict": "clean",
+   "n": 0,
+   "ok": true,
+   "status": "DONE"
+  },
+  {
+   "p": "04",
+   "expect": "defect",
+   "verdict": "defect",
+   "n": 2,
+   "ok": true,
+   "status": "DONE"
+  },
+  {
+   "p": "05",
+   "expect": "defect",
+   "verdict": "defect",
+   "n": 2,
+   "ok": true,
+   "status": "DONE"
+  },
+  {
+   "p": "06",
+   "expect": "defect",
+   "verdict": "defect",
+   "n": 1,
+   "ok": true,
+   "status": "DONE"
+  },
+  {
+   "p": "07",
+   "expect": "defect",
+   "verdict": "clean",
+   "n": 0,
+   "ok": false,
+   "status": "DONE"
+  },
+  {
+   "p": "08",
+   "expect": "clean",
+   "verdict": "clean",
+   "n": 0,
+   "ok": true,
+   "status": "DONE"
+  },
+  {
+   "p": "09",
+   "expect": "defect",
+   "verdict": "defect",
+   "n": 1,
+   "ok": true,
+   "status": "DONE"
+  },
+  {
+   "p": "10",
+   "expect": "defect",
+   "verdict": "defect",
+   "n": 2,
+   "ok": true,
+   "status": "DONE"
+  },
+  {
+   "p": "11",
+   "expect": "defect",
+   "verdict": "defect",
+   "n": 2,
+   "ok": true,
+   "status": "DONE"
+  },
+  {
+   "p": "12",
+   "expect": "clean",
+   "verdict": "clean",
+   "n": 0,
+   "ok": true,
+   "status": "DONE"
+  },
+  {
+   "p": "13",
+   "expect": "defect",
+   "verdict": "defect",
+   "n": 1,
+   "ok": true,
+   "status": "DONE"
+  },
+  {
+   "p": "14",
+   "expect": "defect",
+   "verdict": "defect",
+   "n": 1,
+   "ok": true,
+   "status": "DONE"
+  },
+  {
+   "p": "15",
+   "expect": "defect",
+   "verdict": "defect",
+   "n": 3,
+   "ok": true,
+   "status": "DONE"
+  }
+ ]
+}

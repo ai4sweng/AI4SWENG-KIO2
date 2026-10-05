@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>KIO2 Guide</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f7f7f9;
+    --surface: #ffffff;
+    --surface-2: #f0f1f5;
+    --border: #e1e3ea;
+    --text: #1d2030;
+    --text-dim: #5a5f73;
+    --accent: #3b5bdb;
+    --accent-soft: #edf1ff;
+    --ok: #2b8a3e;
+    --ok-soft: #e9f7ec;
+    --err: #c92a2a;
+    --err-soft: #fdecec;
+    --code-bg: #1f2130;
+    --code-text: #e8e9f0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12131a;
+      --surface: #1a1c26;
+      --surface-2: #222533;
+      --border: #2e3142;
+      --text: #e6e7ee;
+      --text-dim: #a0a4b8;
+      --accent: #8ea4ff;
+      --accent-soft: #22284a;
+      --ok: #69db7c;
+      --ok-soft: #1c3324;
+      --err: #ff8787;
+      --err-soft: #3a1f22;
+      --code-bg: #0d0e14;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12131a; --surface: #1a1c26; --surface-2: #222533; --border: #2e3142;
+    --text: #e6e7ee; --text-dim: #a0a4b8; --accent: #8ea4ff; --accent-soft: #22284a;
+    --ok: #69db7c; --ok-soft: #1c3324; --err: #ff8787; --err-soft: #3a1f22; --code-bg: #0d0e14;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.9rem; line-height: 1.25; margin: 0 0 8px; }
+  h2 { font-size: 1.3rem; margin: 48px 0 12px; }
+  h3 { font-size: 1.05rem; margin: 24px 0 8px; }
+  p { margin: 0 0 12px; }
+  .lead { color: var(--text-dim); font-size: 1.1rem; }
+  a { color: var(--accent); }
+  code {
+    font: 0.9em ui-monospace, SFMono-Regular, Consolas, monospace;
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 14px 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font: 0.85rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+    margin: 0 0 16px;
+  }
+  pre code { background: none; padding: 0; color: inherit; }
+
+  nav { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 20px 0 0; font-size: 0.95rem; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .step b { display: block; margin-bottom: 4px; }
+  .step span { color: var(--text-dim); font-size: 0.95rem; }
+  .num {
+    display: inline-block; width: 24px; height: 24px; line-height: 24px;
+    text-align: center; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent);
+    font-weight: 600; font-size: 0.85rem; margin-bottom: 6px;
+  }
+
+  .diagrams { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 12px 0 16px; }
+  .diagram-link {
+    display: block;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    color: var(--text);
+    text-decoration: none;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .diagram-link:hover, .diagram-link:focus-visible { border-color: var(--accent); background: var(--accent-soft); }
+  .diagram-link b { display: block; margin-bottom: 4px; }
+  .diagram-link span { display: block; color: var(--text-dim); font-size: 0.95rem; }
+  .diagram-link .go { color: var(--accent); font-weight: 600; margin-top: 8px; }
+
+  .table-wrap { overflow-x: auto; margin: 0 0 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-dim); font-weight: 600; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .card p { margin: 0 0 10px; }
+  .card p:last-child { margin-bottom: 0; }
+  details { margin-top: 12px; }
+  summary { cursor: pointer; color: var(--accent); }
+
+  ul.plain { padding-left: 20px; margin: 0 0 12px; }
+  ul.plain li { margin-bottom: 4px; }
+
+  @media (max-width: 640px) {
+    .steps, .diagrams { grid-template-columns: 1fr; }
+    h1 { font-size: 1.6rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<h1>KIO2: find where a Python program failed</h1>
+<p class="lead">
+  KIO2 runs a failing Python program once, records every statement it executes,
+  and works backwards from the error to the lines that caused it.
+  It reports those lines with the values they held at the time of the failure.
+</p>
+<nav>
+  <a href="#how">How it works</a>
+  <a href="#diagrams">Diagrams</a>
+  <a href="#try">Try it</a>
+  <a href="#input">Input</a>
+  <a href="#output">Output</a>
+  <a href="#capabilities">Capabilities</a>
+  <a href="#kio1">Called by KIO1</a>
+  <a href="#endpoints">Endpoints</a>
+  <a href="#run">Run it</a>
+  <a href="#limits">Limits</a>
+</nav>
+
+<h2 id="how">How it works</h2>
+<div class="steps">
+  <div class="step">
+    <span class="num">1</span>
+    <b>Record</b>
+    <span>KIO2 runs the program under the FocusTracer engine. Every executed line, and the variables it read and changed, goes into a trace file (XML).</span>
+  </div>
+  <div class="step">
+    <span class="num">2</span>
+    <b>Slice</b>
+    <span>Starting at the line that raised the error, KIO2 follows the recorded values backwards and keeps only the lines that fed into the failure.</span>
+  </div>
+  <div class="step">
+    <span class="num">3</span>
+    <b>Report</b>
+    <span>Those lines come back as findings, with the variables in scope at the crash and a link to the trace.</span>
+  </div>
+</div>
+<p>
+  KIO2 does not guess from the source code. Everything it reports comes from a real run.
+  That is why it needs a program it can execute, and why a program that runs without
+  an error is reported as <code>clean</code>.
+</p>
+<h3 id="diagrams">Diagrams</h3>
+<p>Interactive diagrams show each flow step by step. Start with the first two, then open the one for the capability you need:</p>
+<div class="diagrams">
+  <a class="diagram-link" href="web/kio2-http.html">
+    <b>KIO1 calls KIO2</b>
+    <span>The HTTP exchange for all four capabilities: a step that records the run, then a step that reuses the trace.</span>
+    <span class="go">Open diagram &rarr;</span>
+  </a>
+  <a class="diagram-link" href="web/kio2-buglocation.html">
+    <b>Inside KIO2: bug_localization</b>
+    <span>Which KIO2 modules run during one bug localization.</span>
+    <span class="go">Open diagram &rarr;</span>
+  </a>
+  <a class="diagram-link" href="web/kio2-diagnosis.html">
+    <b>Inside KIO2: diagnosis</b>
+    <span>The root cause and its evidence, optionally compared with a passing run.</span>
+    <span class="go">Open diagram &rarr;</span>
+  </a>
+  <a class="diagram-link" href="web/kio2-replay.html">
+    <b>Inside KIO2: replay</b>
+    <span>Walking through a recorded run without running it again.</span>
+    <span class="go">Open diagram &rarr;</span>
+  </a>
+  <a class="diagram-link" href="web/kio2-alignment.html">
+    <b>Inside KIO2: trace_alignment</b>
+    <span>Comparing two or more recorded runs of the same program.</span>
+    <span class="go">Open diagram &rarr;</span>
+  </a>
+</div>
+
+<h2 id="try">Try it</h2>
+<p>
+  Start KIO2 (see <a href="#run">Run it</a>) and open the playground it serves:
+  <code>http://&lt;your_ip&gt;:8102/playground</code>.
+</p>
+<div class="card">
+  <p>
+    The playground runs the four capabilities from one page: <b>Locate</b> the fault,
+    <b>Diagnose</b> its cause, <b>Replay</b> the recording step by step (backwards too),
+    and <b>Compare</b> two runs. It shows the source with the suspect lines marked, and
+    every request and reply exchanged with KIO2 under <i>Show request and reply</i>.
+  </p>
+  <p>
+    It drives the same <code>POST /jobs</code> and <code>GET /jobs/{job_id}</code> that KIO1 uses,
+    so what it shows is what the orchestrator receives. The bundled failing and corrected
+    examples run as they are. To edit them or paste your own program, start KIO2 with
+    <code>KIO2_PLAYGROUND_SNIPPETS=1</code>: pasted code is executed on the KIO2 machine,
+    so enable it only on a machine you trust.
+  </p>
+</div>
+
+<h2 id="input">Input</h2>
+<p>KIO2 needs two things: the folder of the code and the script that reproduces the failure.</p>
+<div class="table-wrap">
+<table>
+  <tr><th>Field</th><th>Meaning</th></tr>
+  <tr><td><code>repository</code></td><td>The project folder. The script runs with this folder as its working directory, and KIO2 looks here for the functions to record.</td></tr>
+  <tr><td><code>entry_point</code></td><td>The script that shows the failure, for example a small reproduction or a failing test.</td></tr>
+  <tr><td><code>trace</code></td><td>Only for replay and comparison: a recording made by an earlier KIO2 step.</td></tr>
+</table>
+</div>
+<p>From KIO1 these arrive as references, for example:</p>
+<pre><code>"data": {
+  "repository":  { "uri": "file:///workspace/shop" },
+  "entry_point": { "uri": "file:///workspace/shop/tests/reproduce.py" }
+}</code></pre>
+<p>A task text, a test name or an artifact name alone is not enough: KIO2 has to know what to run.</p>
+
+<h2 id="output">Output</h2>
+<p>The reply for the bundled example (a shopping cart where no item is in stock, so the average price divides by zero):</p>
+<pre><code>{
+  "summary": "Located the fault at buggy_order_total.py:15 (average_price).",
+  "verdict": "defect",
+  "findings": [
+    { "line": 15, "dependency": "criterion", "confidence": 0.85,
+      "description": "return total / len(prices)" },
+    { "line": 19, "dependency": "data", "confidence": 0.425,
+      "description": "avg = average_price(items)" },
+    { "line": 11, "dependency": "data", "confidence": 0.425,
+      "description": "prices = [it[\"price\"] for it in items if it[\"in_stock\"]]" },
+    { "line": 12, "dependency": "data", "confidence": 0.425,
+      "description": "total = 0" }
+  ],
+  "crash_state": { "prices": "[]", "total": "0", "items": "[...]" },
+  "trace_ref": "kio2://trace/...",
+  "trace_url": "/traces/..."
+}</code></pre>
+<div class="table-wrap">
+<table>
+  <tr><th>Field</th><th>How to read it</th></tr>
+  <tr><td><code>verdict</code></td><td><code>defect</code>: lines were found. <code>clean</code>: the program finished without an error. <code>inconclusive</code>: it failed, but no line could be tied to the failure.</td></tr>
+  <tr><td><code>findings</code></td><td>A chain read backwards from the error. The first line is where the error happened. The next ones produced the values it used. It is not a ranking of guesses; deciding where to fix is left to the developer or to KIO7.</td></tr>
+  <tr><td><code>dependency</code></td><td><code>criterion</code>: the failing line. <code>control</code>: a condition that decided the failing line would run. <code>data</code>: a line that produced a value the failing line used.</td></tr>
+  <tr><td><code>confidence</code></td><td>A fixed rule, not a probability: 0.85 when the failing line is found, lower otherwise, scaled by the dependency. Below 0.6 the reply asks for human review.</td></tr>
+  <tr><td><code>crash_state</code></td><td>Variables at the moment of the error, shown as Python would print them.</td></tr>
+  <tr><td><code>trace_ref</code>, <code>trace_url</code></td><td>The recording. Pass <code>trace_ref</code> to a replay or comparison step. Open <code>trace_url</code> on the KIO2 address to see the XML in a browser.</td></tr>
+</table>
+</div>
+
+<h2 id="capabilities">Capabilities</h2>
+<div class="table-wrap">
+<table>
+  <tr><th>Capability</th><th>What it does</th><th>Needs</th></tr>
+  <tr><td><code>bug_localization</code></td><td>Record the program and report the lines behind the error.</td><td>repository, entry point</td></tr>
+  <tr><td><code>diagnosis</code></td><td>The same analysis written as a root cause, plus the annotated slice a fix step (KIO7) can use.</td><td>repository, entry point</td></tr>
+  <tr><td><code>replay</code></td><td>Move through a recording line by line, forwards or backwards, and read the variables at any point. Nothing is re-run.</td><td>a trace</td></tr>
+  <tr><td><code>trace_alignment</code></td><td>Compare two or more recordings of the same program and show where their executed lines differ.</td><td>two or more traces</td></tr>
+</table>
+</div>
+<p>KIO2 does not write fixes. A request for <code>fix_recommendation</code> is answered with an error, because fixing is KIO7's step.</p>
+
+<h2 id="kio1">Called by KIO1</h2>
+<p>KIO1, the orchestrator, sends KIO2 steps with the same job protocol it uses for every agent:</p>
+<ol>
+  <li>KIO1 sends <code>POST /jobs</code> with the step: capability, task and <code>data</code>.</li>
+  <li>KIO2 answers at once with <code>status: "accepted"</code> and a <code>job_id</code>, then runs the analysis.</li>
+  <li>KIO1 asks <code>GET /jobs/{job_id}</code> every few seconds. While the job runs the answer stays <code>accepted</code>.</li>
+  <li>The final answer is <code>success</code> with <code>artifacts</code> (the result and the <code>trace</code>) or <code>failure</code> with a <code>failure_class</code>, for example <code>entry_point_missing</code>.</li>
+  <li>If a later step depends on this one, KIO1 passes the artifacts on. This is how a replay or comparison step receives the recording.</li>
+</ol>
+
+<h2 id="endpoints">Endpoints</h2>
+<div class="table-wrap">
+<table>
+  <tr><th>Endpoint</th><th>Purpose</th></tr>
+  <tr><td><code>POST /jobs</code>, <code>GET /jobs/{job_id}</code></td><td>The job protocol KIO1 uses.</td></tr>
+  <tr><td><code>POST /execute</code></td><td>The same analysis in one synchronous call, for direct use and scripts.</td></tr>
+  <tr><td><code>GET /playground</code></td><td>The browser playground over the job protocol (<a href="#try">Try it</a>).</td></tr>
+  <tr><td><code>GET /traces/{token}</code></td><td>A recorded trace as XML.</td></tr>
+  <tr><td><code>GET /health</code></td><td>Is the service up.</td></tr>
+  <tr><td><code>GET /tasks</code></td><td>The capabilities, supported language (Python) and the job protocol version.</td></tr>
+  <tr><td><code>GET /schema</code></td><td>JSON schemas of the request and the response of <code>/execute</code>.</td></tr>
+</table>
+</div>
+
+<h2 id="run">Run it</h2>
+<p>One command installs KIO2 and the FocusTracer engine (Python 3.10 or later). Then start the service on port 8102:</p>
+<pre><code>pip install "ai4sweng-kio2 @ git+https://github.com/ai4sweng/AI4SWENG-KIO2.git"
+python -m kio2.main</code></pre>
+<p>Open <code>http://&lt;your_ip&gt;:8102/playground</code> to try KIO2 from the browser, or <code>http://&lt;your_ip&gt;:8102/docs</code> to call every endpoint with ready-to-run examples.</p>
+<p>Or with Docker. Put the code to analyse under <code>./workspace</code> and refer to it as <code>/workspace/...</code>:</p>
+<pre><code>docker compose up --build</code></pre>
+<p>Settings are read from <code>.env</code> (see <code>.env.example</code>), for example <code>KIO2_TRACE_DIR</code> for where traces are written.</p>
+
+<h2 id="limits">Limits</h2>
+<ul class="plain">
+  <li>Python programs only.</li>
+  <li>KIO2 runs the code it is given. There is no authentication, so run it only on a trusted network and only on code you trust.</li>
+  <li>Traces contain real values from the run and are not deleted automatically.</li>
+  <li>Only failures that raise an error are localised. A wrong result without an error is reported as <code>clean</code>.</li>
+</ul>
+
+</main>
+
+</body>
+</html>
